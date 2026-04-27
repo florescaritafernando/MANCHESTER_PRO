@@ -581,6 +581,19 @@ HTML_TEMPLATE = """
             border-left: 4px solid #dc2626;
             margin-top: 20px;
         }
+        .preview { 
+            margin-top: 30px; 
+            padding: 20px; 
+            background: #eff6ff; 
+            border-radius: 10px;
+            border: 2px solid #3b82f6;
+        }
+        .preview h3 { color: #1d4ed8; margin-bottom: 15px; }
+        .preview iframe { 
+            border-radius: 8px; 
+            border: 1px solid #93c5fd;
+            margin-bottom: 15px;
+        }
         .footer {
             text-align: center;
             color: rgba(255,255,255,0.7);
@@ -611,15 +624,23 @@ HTML_TEMPLATE = """
                 <button type="submit" class="btn">🔄 Convertir a PDF</button>
             </form>
             
-            {% if info %}
+{% if info %}
             <div class="info">
-                <h3>✅ Documento generado exitosamente</h3>
+                <h3>✅ Documento generado</h3>
                 <p><strong>Tipo:</strong> {{info.tipo}}</p>
                 <p><strong>Número:</strong> {{info.numero}}</p>
                 <p><strong>Emisor:</strong> {{info.emisor}}</p>
                 <p><strong>Cliente:</strong> {{info.cliente}}</p>
                 <p><strong>Total:</strong> {{info.total}}</p>
                 <p><strong>Fecha:</strong> {{info.fecha}}</p>
+            </div>
+            {% endif %}
+            
+            {% if pdf_base64 %}
+            <div class="preview">
+                <h3>📄 Vista previa del PDF</h3>
+                <iframe src="data:application/pdf;base64,{{pdf_base64}}#toolbar=0&navpanes=0" width="100%" height="500"></iframe>
+                <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn">📥 Descargar PDF</a>
             </div>
             {% endif %}
             
@@ -677,6 +698,11 @@ def convertir():
         
         factura.generate_pdf(formato)
         
+        # Leer PDF y convertir a base64
+        with open(output_path, 'rb') as f:
+            pdf_data = f.read()
+            pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+        
         # Información del documento
         info = {
             'tipo': factura.data.get('tipo_documento', 'N/A'),
@@ -687,14 +713,8 @@ def convertir():
             'fecha': factura.data.get('fecha_emision', 'N/A')
         }
         
-        # Descargar PDF
-        nombre_pdf = f"{factura.data.get('numero_factura', 'ticket')}.pdf"
-        return send_file(
-            output_path, 
-            as_attachment=True, 
-            download_name=nombre_pdf,
-            mimetype='application/pdf'
-        )
+        # Retornar con vista previa
+        return render_template_string(HTML_TEMPLATE, pdf_base64=pdf_base64, info=info, pdf_name=f"{factura.data.get('numero_factura', 'ticket')}.pdf")
         
     except Exception as e:
         logger.exception("Error en conversión")
