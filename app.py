@@ -1,119 +1,173 @@
+"""
+🧾 APP DE CONVERSIÓN XML A PDF - TICKET 80mm
+Desarrollado para ManchesterTex E.I.R.L.
+"""
+
 import xml.etree.ElementTree as ET
 from fpdf import FPDF
 import os
 import tempfile
-from typing import Tuple, Dict, Any
+from typing import Dict, Any, Optional
 import base64
 from datetime import datetime
 import qrcode
-from flask import Flask, request, send_file, render_template_string
-import io
+import logging
+from functools import wraps
+from flask import Flask, request, send_file, render_template_string, jsonify
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Configuración de la app
+CONFIG = {
+    'MAX_FILE_SIZE': 10 * 1024 * 1024,  # 10MB max
+    'ALLOWED_EXTENSIONS': ['.xml'],
+    'DEFAULT_FORMAT': 'ticket',
+    'PAGE_WIDTH': 80,
+}
+
+
+def log_request(f):
+    """Decorador para logging de requests"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        logger.info(f"Request: {request.method} {request.path}")
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def safe_div(a: float, b: float) -> float:
+    """División segura que maneja errores de tipo"""
+    try:
+        return float(a) / float(b)
+    except (TypeError, ZeroDivisionError, ValueError):
+        return 0.0
+
+
 class FacturaXMLtoPDF:
-    def __init__(self, xml_path, output_path, extra_data: Dict[str, Any] = None):
+    """Clase principal para conversión de XML a PDF"""
+    
+    def __init__(self, xml_path: str, output_path: str, extra_data: Optional[Dict[str, Any]] = None):
         self.xml_path = xml_path
         self.output_path = output_path
-        self.data = {}
-        self.line_height = 1
-        self.page_width = 80 
-        self.extra_data = extra_data if extra_data is not None else {} 
-
-    def parse_xml(self):
+        self.data: Dict[str, Any] = {}
+        self.page_width = CONFIG['PAGE_WIDTH']
+        self.extra_data = extra_data or {}
+        self.errors: list = []
+        
+    def add_error(self, message: str):
+        """Agregar error al historial"""
+        self.errors.append(message)
+        logger.error(f"Error: {message}")
+    
+    def parse_xml(self) -> bool:
+        """Parsear archivo XML"""
         try:
+            if not os.path.exists(self.xml_path):
+                self.add_error(f"Archivo no encontrado: {self.xml_path}")
+                return False
+            
             tree = ET.parse(self.xml_path)
             root = tree.getroot()
-                        
+            
             namespaces = {
                 'cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
                 'cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
                 'ds': 'http://www.w3.org/2000/09/xmldsig#'
             }
             
+            # Datos básicos
             self.data['monto_letras'] = ''
             self.data['forma_pago'] = ''
-            self.data['otras_notes'] = []
             
-            notes = root.findall('.//cbc:Note', namespaces)
-            for note in notes:
+            # Extraer notes
+            for note in root.findall('.//cbc:Note', namespaces):
                 note_text = note.text or ''
-                language_locale = note.get('languageLocaleID')
-                language_id = note.get('languageID')
-                                
-                if language_locale == "1000":
+                if note.get('languageLocaleID') == "1000":
                     self.data['monto_letras'] = note_text
-                elif language_id == "L":
+                elif note.get('languageID') == "L":
                     self.data['forma_pago'] = note_text
-                else:
-                    self.data['otras_notes'].append({
-                        'texto': note_text,
-                        'languageLocaleID': language_locale,
-                        'languageID': language_id
-                    })
-                    
-            self.data['numero_factura'] = self.get_text(root, './/cbc:ID', namespaces)
-            self.data['fecha_emision'] = self.get_text(root, './/cbc:IssueDate', namespaces)
-            self.data['hora_emision'] = self.get_text(root, './/cbc:IssueTime', namespaces)
-                        
+            
+            # Datos principales
+            self.data['numero_factura'] = self._get_text(root, './/cbc:ID', namespaces)
+            self.data['fecha_emision'] = self._get_text(root, './/cbc:IssueDate', namespaces)
+            self.data['hora_emision'] = self._get_text(root, './/cbc:IssueTime', namespaces)
+            
+            # Tipo de documento
             numero = self.data.get('numero_factura', '')
-            if numero and numero[0].upper() == 'F':
-                self.data['tipo_documento'] = "FACTURA"
-            else:
-                self.data['tipo_documento'] = "BOLETA DE VENTA"
-                        
+            self.data['tipo_documento'] = "FACTURA" if numero and numero[0].upper() == 'F' else "BOLETA DE VENTA"
+            
+            # Datos del emisor
             emisor = root.find('.//cac:AccountingSupplierParty/cac:Party', namespaces)
-            if emisor is not None:               
-                self.data['emisor_nombre'] = self.get_text(emisor, './/cbc:Name', namespaces) or self.get_text(emisor, './/cbc:RegistrationName', namespaces)
-                self.data['emisor_ruc'] = self.get_text(emisor, './/cac:PartyIdentification/cbc:ID', namespaces) or self.get_text(emisor, './/cbc:ID', namespaces)
-                self.data['emisor_direccion'] = self.get_text(emisor, './/cac:AddressLine/cbc:Line', namespaces)
-                self.data['emisor_distrito'] = self.get_text(emisor, './/cbc:District', namespaces)
-                self.data['emisor_departamento'] = self.get_text(emisor, './/cbc:CityName', namespaces)
-                self.data['correo_emisor'] = self.get_text(emisor, './/cbc:ElectronicMail', namespaces)
-                        
+            if emisor is not None:
+                self.data['emisor_nombre'] = self._get_text(emisor, './/cbc:Name', namespaces) or \
+                                             self._get_text(emisor, './/cbc:RegistrationName', namespaces)
+                self.data['emisor_ruc'] = self._get_text(emisor, './/cac:PartyIdentification/cbc:ID', namespaces) or \
+                                          self._get_text(emisor, './/cbc:ID', namespaces)
+                self.data['emisor_direccion'] = self._get_text(emisor, './/cac:AddressLine/cbc:Line', namespaces)
+                self.data['emisor_distrito'] = self._get_text(emisor, './/cbc:District', namespaces)
+                self.data['emisor_departamento'] = self._get_text(emisor, './/cbc:CityName', namespaces)
+            
+            # Datos del cliente
             cliente = root.find('.//cac:AccountingCustomerParty/cac:Party', namespaces)
             if cliente is not None:
-                self.data['cliente_nombre'] = self.get_text(cliente, './/cbc:RegistrationName', namespaces)
-                self.data['cliente_ID'] = self.get_text(cliente, './/cac:PartyIdentification/cbc:ID', namespaces) or self.get_text(cliente, './/cbc:ID', namespaces) 
-                self.data['cliente_direccion'] = self.get_text(cliente, './/cac:AddressLine/cbc:Line', namespaces)
-                self.data['cliente_distrito'] = self.get_text(cliente, './/cbc:District', namespaces)
-                self.data['cliente_provincia'] = self.get_text(cliente, './/cbc:CountrySubentity', namespaces)
-                self.data['cliente_departamento'] = self.get_text(cliente, './/cbc:CityName', namespaces)
-                
-            self.data['cliente_guia'] = self.get_text(root, './/cac:DespatchDocumentReference/cbc:ID', namespaces)
-                        
-            self.data['total_venta'] = self.get_text(root, './/cac:TaxSubtotal/cbc:TaxableAmount', namespaces, '0.0')
-            self.data['total_igv'] = self.get_text(root, './/cac:TaxTotal/cbc:TaxAmount', namespaces, '0.0')
-            self.data['total_pagar'] = self.get_text(root, './/cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces, '0.0')
-                        
+                self.data['cliente_nombre'] = self._get_text(cliente, './/cbc:RegistrationName', namespaces)
+                self.data['cliente_ID'] = self._get_text(cliente, './/cac:PartyIdentification/cbc:ID', namespaces) or \
+                                         self._get_text(cliente, './/cbc:ID', namespaces)
+                self.data['cliente_direccion'] = self._get_text(cliente, './/cac:AddressLine/cbc:Line', namespaces)
+                self.data['cliente_distrito'] = self._get_text(cliente, './/cbc:District', namespaces)
+                self.data['cliente_provincia'] = self._get_text(cliente, './/cbc:CountrySubentity', namespaces)
+                self.data['cliente_departamento'] = self._get_text(cliente, './/cbc:CityName', namespaces)
+            
+            # Guía de remisión
+            self.data['cliente_guia'] = self._get_text(root, './/cac:DespatchDocumentReference/cbc:ID', namespaces)
+            
+            # Totales
+            self.data['total_venta'] = self._get_text(root, './/cac:TaxSubtotal/cbc:TaxableAmount', namespaces, '0.0')
+            self.data['total_igv'] = self._get_text(root, './/cac:TaxTotal/cbc:TaxAmount', namespaces, '0.0')
+            self.data['total_pagar'] = self._get_text(root, './/cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces, '0.0')
+            
+            # Items
             self.data['items'] = []
             for item in root.findall('.//cac:InvoiceLine', namespaces):
-                item_data = {}
-                item_data['id'] = self.get_text(item, './/cac:SellersItemIdentification/cbc:ID', namespaces)
-                item_data['unidad'] = self.get_text(item, './/cbc:Note', namespaces)
-                item_data['descripcion'] = self.get_text(item, './/cbc:Description', namespaces)
-                item_data['cantidad'] = self.get_text(item, './/cbc:InvoicedQuantity', namespaces, '0')
-                item_data['precio_unitario'] = self.get_text(item, './/cac:Price/cbc:PriceAmount', namespaces, '0.00')
-                item_data['total'] = self.get_text(item, './/cbc:LineExtensionAmount', namespaces, '0.00')                              
+                item_data = {
+                    'id': self._get_text(item, './/cac:SellersItemIdentification/cbc:ID', namespaces),
+                    'unidad': self._get_text(item, './/cbc:Note', namespaces),
+                    'descripcion': self._get_text(item, './/cbc:Description', namespaces),
+                    'cantidad': self._get_text(item, './/cbc:InvoicedQuantity', namespaces, '0'),
+                    'precio_unitario': self._get_text(item, './/cac:Price/cbc:PriceAmount', namespaces, '0.00'),
+                    'total': self._get_text(item, './/cbc:LineExtensionAmount', namespaces, '0.00')
+                }
                 self.data['items'].append(item_data)
             
-            self.data['tipo_codigo_invoice'] = self.get_text(root, './/cbc:InvoiceTypeCode', namespaces)
-            self.data['tipo_doc_cli'] = self.get_text(root, './/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID', namespaces, attr='schemeID')
-            self.data['digest_value'] = self.get_text(root, './/ds:DigestValue', namespaces)
-
+            # Datos para QR
+            self.data['tipo_codigo_invoice'] = self._get_text(root, './/cbc:InvoiceTypeCode', namespaces)
+            self.data['tipo_doc_cli'] = self._get_text(
+                root, 
+                './/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID', 
+                namespaces, 
+                attr='schemeID'
+            )
+            
+            # Digest value
             namespaces_ds = {'ds': 'http://www.w3.org/2000/09/xmldsig#'}
             digest_node = root.find('.//ds:DigestValue', namespaces_ds)
             self.data['digest_value'] = digest_node.text if digest_node is not None else ""
-
+            
             self.data.update(self.extra_data)
             
+            logger.info(f"XML parseado: {self.data.get('numero_factura', 'N/A')}")
             return True
-                    
+            
         except Exception as e:
-            print(f"Error al parsear XML: {e}")
+            self.add_error(f"Error al parsear XML: {str(e)}")
             return False
     
-    def get_text(self, node, path, namespaces, default='-', attr=None):
+    def _get_text(self, node, path: str, namespaces: Dict, default: str = '-', attr: str = None) -> str:
+        """Obtener texto de manera segura"""
         if node is None:
             return default
         try:
@@ -125,102 +179,52 @@ class FacturaXMLtoPDF:
         except Exception:
             pass
         return default
-
-    def format_currency(self, amount):
+    
+    def format_currency(self, amount: str) -> str:
+        """Formatear monto como moneda"""
         try:
             return f"S/. {float(amount):.2f}"
-        except:
-            return f"S/. 0.00"
-
-    def calculate_total_height(self):
+        except (ValueError, TypeError):
+            return "S/. 0.00"
+    
+    def calculate_total_height(self) -> float:
+        """Calcular altura total del PDF"""
         pdf_temp = FPDF(orientation='P', unit='mm', format=(self.page_width, 300))
-        pdf_temp.set_margins(left=0, top=0, right=0)
+        pdf_temp.set_margins(0, 0, 0)
         pdf_temp.add_page()
         pdf_temp.set_font("Arial", '', 10)
         
         y = 2
         
+        # Logo
         if os.path.exists("images/logo_manchester.png"):
-            y += float(40) / 3 + 6
+            y += safe_div(40, 3) + 6
         
+        # Encabezado emisor
         y += 4
-        
         emisor_nombre = self.data.get('emisor_nombre', 'N/A')
-        if len(emisor_nombre) > 35:
-            y += 8
-        else:
-            y += 4
+        y += 8 if len(emisor_nombre) > 35 else 4
+        y += 4
+        y += 4  # Dirección
+        y += 1 + 2 + 4 + 5 + 1 + 2 + 4 + 4 + 1 + 2 + 4 + 1 + 2
         
-        y += 4
-        
-        emisor_dir = self.data.get('emisor_direccion', '')
-        emisor_dis = self.data.get('emisor_distrito', '')
-        emisor_dep = self.data.get('emisor_departamento', '')
-        direccion_completa = f"{emisor_dir}"
-        if emisor_dis:
-            direccion_completa += f" - {emisor_dis}"
-        if emisor_dep:
-            direccion_completa += f" - {emisor_dep}"
-        
-        if len(direccion_completa) > 35:
-            y += 8
-        else:
-            y += 4
-        
-        y += 4
-        y += 1 + 2
-        y += 4
-        y += 5
-        y += 1 + 2
-        y += 4
-        y += 4
-        y += 1 + 2
-        y += 4
-        y += 1 + 2
-        
+        # Cliente
         cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
-        if len(cliente_nombre) > 25:
-            y += 8
-        else:
-            y += 4
-        
+        y += 8 if len(cliente_nombre) > 25 else 4
         y += 1
-        
         c_dir = (self.data.get('cliente_direccion', '') or "").strip()
-        c_dis = self.data.get('cliente_distrito', '')
-        c_pro = self.data.get('cliente_provincia', '')
-        c_dep = self.data.get('cliente_departamento', '')
+        y += 8 if len(c_dir) > 24 else 4
         
-        if len(c_dir) > 24:
-            y += 8
-        else:
-            y += 4
+        extras = [p for p in [
+            self.data.get('cliente_departamento', ''),
+            self.data.get('cliente_provincia', ''),
+            self.data.get('cliente_distrito', '')
+        ] if p and p.strip()]
+        y += 1 + (8 if len(" - ".join(extras)) > 24 else 4) if extras else 0
         
-        extras = [parte for parte in [c_dep, c_pro, c_dis] if parte and parte.strip()]
-        if extras:
-            y += 1
-            if len(" - ".join(extras)) > 24:
-                y += 8
-            else:
-                y += 4
+        y += 2 + 1 + 2 + 4 + 1 + 1 + 2 + 1 + 2 + 1 + 2
         
-        y += 2 + 1 + 2
-        y += 4
-        
-        guia = self.data.get('cliente_guia', '')
-        if guia and guia not in [None, '', 'N/A', '-']:
-            y += 1
-        
-        f_pago = self.data.get('forma_pago', '')
-        if f_pago:
-            y += 1
-        
-        y += 1
-        
-        y += 2 + 1 + 2
-        
-        y += 1 + 2
-        
+        # Items
         pdf_temp.set_font("Arial", '', 8)
         for item in self.data.get('items', []):
             descripcion = str(item.get('descripcion', ''))
@@ -239,51 +243,45 @@ class FacturaXMLtoPDF:
         
         y += 2 + 5 + 5 + 8 + 2
         
+        # Totales
         monto_l = self.data.get('monto_letras', '')
-        if monto_l:
-            if len(monto_l) > 24:
-                y += 8
-            else:
-                y += 4
+        y += 8 if len(monto_l) > 24 else 4
         
-        y += 2
-        
-        y += float(30) / 3 + 20 + 4 + 4
-        
-        y += 20
+        y += safe_div(30, 3) + 20 + 4 + 4 + 20
         
         return max(100, min(800, y + 30))
-
+    
     def generate_pdf(self, output_format: str = 'ticket'):
+        """Generar PDF según formato"""
         if output_format == 'ticket':
             self._generate_ticket_pdf()
         else:
-            raise ValueError("Formato de salida no válido.")
-
+            raise ValueError(f"Formato no válido: {output_format}")
+    
     def _generate_ticket_pdf(self):
+        """Generar ticket 80mm"""
         page_height = self.calculate_total_height()
+        
         pdf = FPDF(orientation='P', unit='mm', format=(self.page_width, page_height))
-        pdf.set_margins(left=0, top=0, right=0)
+        pdf.set_margins(0, 0, 0)
         pdf.set_auto_page_break(auto=False)
         pdf.add_page()
         
+        # Logo
         image_path = "images/logo_manchester.png"
-        image_x = 20
-        image_width = 40
-        
-        try:
-            if os.path.exists(image_path):
-                pdf.image(image_path, x=image_x, y=3, w=image_width)
-                image_height = float(image_width) / 3
-                pdf.ln(image_height + 4)
-            else:
-                os.makedirs("images", exist_ok=True)
+        if os.path.exists(image_path):
+            try:
+                pdf.image(image_path, x=20, y=3, w=40)
+                pdf.ln(safe_div(40, 3) + 4)
+            except Exception as e:
+                logger.warning(f"Error cargando logo: {e}")
                 pdf.ln(5)
-        except Exception as e:
+        else:
             pdf.ln(5)
         
         pdf.ln(1)
-
+        
+        # Encabezado emisor
         pdf.set_font("Arial", '', 10)
         emisor_nombre = self.data.get('emisor_nombre', 'N/A')
         if len(emisor_nombre) > 35:
@@ -291,276 +289,199 @@ class FacturaXMLtoPDF:
         else:
             pdf.cell(0, 4, emisor_nombre, 0, 1, 'C')
         
-        pdf.set_font("Arial", '', 10)
         pdf.cell(0, 4, f"RUC: {self.data.get('emisor_ruc', 'N/A')}", 0, 1, 'C')
-
+        
+        # Dirección emisor
         emisor_dir = self.data.get('emisor_direccion', '')
         emisor_dis = self.data.get('emisor_distrito', '')
         emisor_dep = self.data.get('emisor_departamento', '')
-        direccion_completa = f"{emisor_dir}"
+        dir_completa = f"{emisor_dir}"
         if emisor_dis:
-            direccion_completa += f" - {emisor_dis}"
+            dir_completa += f" - {emisor_dis}"
         if emisor_dep:
-            direccion_completa += f" - {emisor_dep}"
-            
-        if len(direccion_completa) > 35:
-            pdf.multi_cell(0, 4, direccion_completa, 0, 'C')
+            dir_completa += f" - {emisor_dep}"
+        
+        if len(dir_completa) > 35:
+            pdf.multi_cell(0, 4, dir_completa, 0, 'C')
         else:
-            pdf.cell(0, 4, direccion_completa, 0, 1, 'C')
+            pdf.cell(0, 4, dir_completa, 0, 1, 'C')
         
         pdf.ln(1)
         pdf.cell(0, 1, "", "T", 1)
         pdf.ln(2)
         
+        # Tipo documento
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 4, f"{self.data.get('tipo_documento', 'COMPROBANTE')} ELECTRÓNICA", 0, 1, 'C')
         pdf.set_font("Arial", 'B', 14)
         pdf.cell(0, 5, self.data.get('numero_factura', 'N/A'), 0, 1, 'C')
-
+        
         pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
         pdf.ln(2)
         
+        # Datos cliente
         pdf.set_font("Arial", '', 10)
         cliente_id = self.data.get('cliente_ID', '')
-        if len(cliente_id) == 11:
-            pdf.cell(10, 4, f"RUC: ", 0, 0)
-        elif len(cliente_id) == 8:
-            pdf.cell(10, 4, f"DNI: ", 0, 0)
-        elif cliente_id:
-            pdf.cell(10, 4, f"CE: ", 0, 0)
-
+        label_id = "RUC:" if len(cliente_id) == 11 else ("DNI:" if len(cliente_id) == 8 else "CE:")
+        pdf.cell(10, 4, label_id, 0, 0)
         pdf.set_font("Arial", '', 12)
         pdf.cell(80, 4, cliente_id, 0, 1)
-
+        
         pdf.ln(1)
         pdf.set_font("Arial", '', 10)
         cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
+        label = "RAZÓN SOCIAL:" if len(cliente_id) == 11 else "CLIENTE:"
         if len(cliente_nombre) > 25:
-            pdf.multi_cell(0, 4, f"CLIENTE: {cliente_nombre}", 0)
+            pdf.multi_cell(0, 4, f"{label} {cliente_nombre}", 0)
         else:
-            pdf.cell(0, 4, f"CLIENTE: {cliente_nombre}", 0, 1)
-            
-        pdf.ln(1)
-
-        cliente_dir = self.data.get('cliente_direccion', '')
-        cliente_dis = self.data.get('cliente_distrito', '')
-        cliente_pro = self.data.get('cliente_provincia', '')
-        cliente_dep = self.data.get('cliente_departamento', '')
-        valores_invalidos = ['', 'N/A', 'n/a', '-', '--', '---', None]
+            pdf.cell(0, 4, f"{label} {cliente_nombre}", 0, 1)
         
-        c_dir = (cliente_dir or "").strip()
-        c_dis = (cliente_dis or "").strip()
-        c_pro = (cliente_pro or "").strip()
-        c_dep = (cliente_dep or "").strip()
-                        
+        pdf.ln(1)
+        
+        # Dirección cliente
+        c_dir = (self.data.get('cliente_direccion', '') or "").strip()
+        c_dis = self.data.get('cliente_distrito', '')
+        c_pro = self.data.get('cliente_provincia', '')
+        c_dep = self.data.get('cliente_departamento', '')
+        
         pdf.set_font("Arial", '', 10)
-
         if len(c_dir) > 24:
             pdf.multi_cell(0, 4, f"DIRECCIÓN: {c_dir.upper()}", 0)
         else:
             pdf.cell(0, 4, f"DIRECCIÓN: {c_dir.upper()}", 0, 1, 'L')
-
-        extras = [parte for parte in [c_dep, c_pro, c_dis] if parte and parte not in valores_invalidos]
+        
+        extras = [p for p in [c_dep, c_pro, c_dis] if p and p.strip()]
         if extras:
             pdf.ln(1)
-            direccion_a_mostrar = " - ".join(extras).upper()
-            texto_ciudad = f"CIUDAD: {direccion_a_mostrar}"
-            
-            if len(texto_ciudad) > 24:
-                pdf.multi_cell(0, 4, texto_ciudad, 0, 'L')
+            txt = f"CIUDAD: {' - '.join(extras).upper()}"
+            if len(txt) > 24:
+                pdf.multi_cell(0, 4, txt, 0, 'L')
             else:
-                pdf.cell(0, 4, texto_ciudad, 0, 1, 'L')
-
+                pdf.cell(0, 4, txt, 0, 1, 'L')
+        
         pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
         pdf.ln(2)
         
-        pdf.set_font("Arial", '', 10)
+        # Guía de remisión
         guia = self.data.get('cliente_guia', '')
-        if guia and guia not in [None, '', 'N/A', '-'] and guia.strip():
-            pdf.set_font("Arial", '', 10)
-            pdf.cell(35, 4, "GUIA DE REMISIÓN: ", 0, 0)
-            
+        if guia and guia not in ['', 'N/A', '-']:
+            pdf.cell(35, 4, "GUÍA DE REMISIÓN: ", 0, 0)
             pdf.set_font("Arial", 'B', 12)
             pdf.cell(45, 4, f"N° {guia}", 0, 1)
             pdf.ln(1)
         
+        # Forma de pago
         pdf.set_font("Arial", '', 10)
-
         f_pago = self.data.get('forma_pago', '').upper()
-        if len(f_pago) > 15:
-            pdf.multi_cell(0, 4, f"FORMA DE PAGO: {f_pago}", 0)
-        else:
-            pdf.cell(0, 4, f"FORMA DE PAGO: {f_pago}", 0, 1)
-            
+        pdf.cell(0, 4, f"FORMA DE PAGO: {f_pago}" if f_pago else "", 0, 1)
+        
         pdf.ln(1)
+        # Fecha
         fecha = self.data.get('fecha_emision', 'N/A')
-        hora = self.data.get('hora_emision', 'N/A')
-
-        fecha_formateada = fecha
-
         if fecha != 'N/A':
             try:
-                objeto_fecha = datetime.strptime(fecha, '%Y-%m-%d')
-                fecha_formateada = objeto_fecha.strftime('%d/%m/%Y')
-                
+                fecha = datetime.strptime(fecha, '%Y-%m-%d').strftime('%d/%m/%Y')
             except ValueError:
                 pass
-
-        if fecha_formateada != 'N/A' and hora != 'N/A':
-            fecha_hora = f"{fecha_formateada} {hora}"
-            pdf.cell(0, 4, f"FECHA DE EMISIÓN: {fecha_hora}", 0, 1, 'L')
-        elif fecha_formateada != 'N/A':
-            pdf.cell(0, 4, f"FECHA: {fecha_formateada}", 0, 1, 'L')
-            if hora != 'N/A':
-                pdf.cell(0, 4, f"HORA: {hora}", 0, 1, 'R')
-        else:
-            pdf.cell(0, 4, f"FECHA: {fecha}", 0, 1, 'L')
-            if hora != 'N/A':
-                pdf.cell(0, 4, f"HORA: {hora}", 0, 1, 'R')    
-                
+        hora = self.data.get('hora_emision', '')
+        pdf.cell(0, 4, f"FECHA DE EMISIÓN: {fecha} {hora}".strip(), 0, 1)
+        
         pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
         pdf.ln(2)
         
+        # Tabla de items
         anchuras = [8, 14, 10, 22, 10, 16]
-        original_color = pdf.draw_color
         pdf.set_draw_color(255, 255, 255)
-
         pdf.set_font("Arial", '', 7)
-
-        x2_start = pdf.get_x()
-        pdf.cell(anchuras[0], 1, "COD.", 1, 0, 'C')
-        pdf.cell(anchuras[1], 1, "CANT.", 1, 0, 'C')
-        pdf.cell(anchuras[2], 1, "UNID.", 1, 0, 'C')
-        pdf.cell(anchuras[3], 1, "DESCRIPCION", 1, 0, 'C')
-        pdf.cell(anchuras[4], 1, "V.UNIT.", 1, 0, 'C')
-        pdf.cell(anchuras[5], 1, "V.VENTA", 1, 1, 'C')
-
-        pdf.set_draw_color(original_color)
-
-        pdf.set_xy(x2_start, pdf.get_y())
-
-        pdf.ln(2)
-        pdf.cell(0, 2, "", "T", 1)
-
+        
+        headers = ["COD.", "CANT.", "UNID.", "DESCRIPCIÓN", "V.UNIT.", "V.VENTA"]
+        for i, h in enumerate(headers):
+            pdf.cell(anchuras[i], 1, h, 1, 0, 'C')
+        pdf.ln(1)
+        
         pdf.set_font("Arial", '', 8)
-        
-        pdf.set_draw_color(255, 255, 255)
-
         for item in self.data.get('items', []):
-            codigo = str(item.get('id', 'N/A'))[:20]
-            cantidad = str(item.get('cantidad', '0'))[:6]
-            unidad = str(item.get('unidad', 'MTS'))[:4]
-            descripcion = str(item.get('descripcion', 'N/A'))
-            precio_unitario = str(item.get('precio_unitario', '0.00'))[:5]
-            total = str(item.get('total', '0.00'))
-                        
             x_start = pdf.get_x()
-            y_start = pdf.get_y()
-
-            pdf.set_font("Arial", '', 8)
-
-            pdf.cell(anchuras[0], 3, codigo, 1, 0, 'C')
-            pdf.set_font("Arial", '', 10)
-
-            pdf.cell(anchuras[1], 3, cantidad, 1, 0, 'C')
-
-            pdf.set_font("Arial", '', 8)
-
-            pdf.cell(anchuras[2], 3, unidad, 1, 0, 'C')
-
-            x_descripcion = pdf.get_x()
-
-            pdf.multi_cell(anchuras[3], 3, descripcion, 0, 'C')
-            y_final = pdf.get_y()
-            
-            altura_fila = y_final - y_start
-
-            pdf.set_y(y_start)
-            
-            pdf.set_x(x_descripcion + anchuras[3]) 
-
-            pdf.cell(anchuras[4], altura_fila, precio_unitario, 1, 0, 'C')
-            pdf.cell(anchuras[5], altura_fila, total, 1, 1, 'C')
-            pdf.set_xy(x_start, pdf.get_y())
+            pdf.cell(anchuras[0], 3, str(item.get('id', ''))[:20], 1, 0, 'C')
+            pdf.cell(anchuras[1], 3, str(item.get('cantidad', '0'))[:6], 1, 0, 'C')
+            pdf.cell(anchuras[2], 3, str(item.get('unidad', 'MTS'))[:4], 1, 0, 'C')
+            x_desc = pdf.get_x()
+            pdf.multi_cell(anchuras[3], 3, str(item.get('descripcion', '')), 0, 'C')
+            y_desc = pdf.get_y()
+            pdf.set_y(y_desc - 3)
+            pdf.set_x(x_desc + anchuras[3])
+            pdf.cell(anchuras[4], 3, str(item.get('precio_unitario', ''))[:5], 1, 0, 'C')
+            pdf.cell(anchuras[5], 3, str(item.get('total', '')), 1, 1, 'C')
+            pdf.set_x(x_start)
             pdf.ln(2)
-
-        pdf.set_draw_color(original_color)
+        
         pdf.ln(2)
         
-        pdf.set_margins(left=0, top=2, right=0)
+        # Totales
         pdf.set_font("Arial", '', 10)
         pdf.cell(50, 5, "OP. GRAVADA:", 0, 0)
         pdf.cell(30, 5, self.format_currency(self.data.get('total_venta', '0.00')), 0, 1, 'R')
         pdf.cell(50, 5, "IGV:", 0, 0)
         pdf.cell(30, 5, self.format_currency(self.data.get('total_igv', '0.00')), 0, 1, 'R')
-
+        
         pdf.set_font("Arial", 'B', 14)
         pdf.cell(50, 6, "TOTAL:", 0, 0)
         pdf.cell(30, 8, self.format_currency(self.data.get('total_pagar', '0.00')), 0, 1, 'R')
-
+        
         pdf.ln(2)
         pdf.set_font("Arial", '', 10)
-        monto_l = self.data.get('monto_letras')
-        if len(monto_l) > 24:
-            pdf.multi_cell(0, 4, f"SON: {monto_l}", 0)
-        else:
-            pdf.cell(0, 4, f"SON: {monto_l}", 0, 1)
+        monto_l = self.data.get('monto_letras', '')
+        if monto_l:
+            pdf.multi_cell(0, 4, f"SON: {monto_l}", 0) if len(monto_l) > 24 else \
+                pdf.cell(0, 4, f"SON: {monto_l}", 0, 1)
+        
         pdf.ln(2)
         
-        ruc_emisor = self.data.get('emisor_ruc', '')
-        tipo_invoice = self.data.get('tipo_codigo_invoice', '01')
-        full_id = self.data.get('numero_factura', '').split('-')
-        serie = full_id[0]
-        correlativo = full_id[1]
-
-        val_igv = float(self.data.get('total_igv', '0.0'))
-        val_total = float(self.data.get('total_pagar', '0.0'))
-
-        igv = "{:.2f}".format(val_igv).rstrip('0').rstrip('.')
-        if '.' not in igv: igv += '.0'
-
-        total = "{:.2f}".format(val_total).rstrip('0').rstrip('.')
-        if '.' not in total: total += '.0'
-
-        fecha = self.data.get('fecha_emision', '')
-        tipo_doc_cliente = self.data.get('tipo_doc_cli', '')
-        ruc_cli = self.data.get('cliente_ID', '')
-        digest = self.data.get('digest_value', '')
-
-        cadena_qr = f"{ruc_emisor}|{tipo_invoice}|{serie}|{correlativo}|{igv}|{total}|{fecha}|{tipo_doc_cliente}|{ruc_cli}|{digest}|"
+        # QR
+        self._generate_qr(pdf)
         
-        qr_img = qrcode.make(cadena_qr)
-        qr_path = "images/temp_qr_dinamico.png"
-        qr_img.save(qr_path)                                
-
-        ruc_emisor = self.data.get('emisor_ruc', '')
-        if ruc_emisor and ruc_emisor != 'N/A':
-            image_path = "images/temp_qr_dinamico.png"
-            if not os.path.exists(image_path):
-                image_path = f"images/{ruc_emisor}.png"
-            
-            image_width = 30
-            page_w = float(self.page_width)
-            image_w = float(image_width)
-            image_x = (page_w - image_w) / 2
-            try:
-                if os.path.exists(image_path):
-                    pdf.image(image_path, x=image_x, y=pdf.get_y(), w=image_width)
-                    image_height = float(image_width) / 3
-                    pdf.set_y(pdf.get_y() + image_height + 20)
-            except Exception as e:
-                pass
-        
+        # Pie
         pdf.cell(0, 4, "Representación impresa del comprobante de pago", 0, 1, 'C')
         pdf.set_font("Arial", 'I', 10)
         pdf.cell(0, 4, "¡Gracias por su compra!", 0, 1, 'C')
         
         pdf.output(self.output_path)
-        print(f"PDF generado: {self.output_path} (Ticket 80mm)")
+        logger.info(f"PDF generado: {self.output_path}")
+    
+    def _generate_qr(self, pdf):
+        """Generar código QR"""
+        ruc = self.data.get('emisor_ruc', '')
+        tipo = self.data.get('tipo_codigo_invoice', '01')
+        serie, correlativo = self.data.get('numero_factura', '001-000001').split('-')[:2]
+        
+        val_igv = safe_div(float(self.data.get('total_igv', '0')), 1)
+        val_total = safe_div(float(self.data.get('total_pagar', '0')), 1)
+        
+        fecha = self.data.get('fecha_emision', '')
+        tipo_doc_cli = self.data.get('tipo_doc_cli', '')
+        ruc_cli = self.data.get('cliente_ID', '')
+        digest = self.data.get('digest_value', '')
+        
+        cadena_qr = f"{ruc}|{tipo}|{serie}|{correlativo}|{val_igv:.2f}|{val_total:.2f}|{fecha}|{tipo_doc_cli}|{ruc_cli}|{digest}|"
+        
+        try:
+            qr_img = qrcode.make(cadena_qr)
+            qr_path = "images/temp_qr.png"
+            qr_img.save(qr_path)
+            
+            if ruc and os.path.exists(qr_path):
+                img_w = 30
+                img_x = safe_div(self.page_width - img_w, 2)
+                pdf.image(qr_path, x=img_x, y=pdf.get_y(), w=img_w)
+                pdf.set_y(pdf.get_y() + safe_div(img_w, 3) + 20)
+        except Exception as e:
+            logger.warning(f"Error generando QR: {e}")
 
+
+# ========== FLASK ROUTES ==========
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -568,47 +489,137 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversor XML a PDF - Ticket 80mm</title>
+    <title>🧾 Conversor XML a PDF - ManchesterTex</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
         .container { max-width: 800px; margin: 0 auto; }
-        h1 { color: #2563eb; text-align: center; margin-bottom: 30px; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #374151; }
-        input[type="file"] { width: 100%; padding: 12px; border: 2px dashed #e0e0e0; border-radius: 8px; }
-        select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #e0e0e0; }
-        .btn { width: 100%; padding: 15px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
-        .btn:hover { background: #45a049; }
-        .info { margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px; }
-        .info h3 { color: #059669; margin-bottom: 15px; }
-        .info p { margin-bottom: 8px; line-height: 1.6; }
-        .error { background: #fee2e2; color: #dc2626; padding: 15px; border-radius: 8px; margin-top: 20px; }
+        h1 { 
+            color: white; 
+            text-align: center; 
+            margin-bottom: 10px;
+            font-size: 2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1rem;
+        }
+        .card { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .form-group { margin-bottom: 25px; }
+        label { 
+            display: block; 
+            margin-bottom: 10px; 
+            font-weight: 600; 
+            color: #374151;
+            font-size: 0.95rem;
+        }
+        input[type="file"] { 
+            width: 100%; 
+            padding: 15px; 
+            border: 2px dashed #cbd5e1; 
+            border-radius: 10px;
+            background: #f8fafc;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        input[type="file"]:hover {
+            border-color: #667eea;
+            background: #f1f5f9;
+        }
+        select { 
+            width: 100%; 
+            padding: 15px; 
+            border-radius: 10px; 
+            border: 1px solid #cbd5e1;
+            background: white;
+            font-size: 1rem;
+        }
+        .btn { 
+            width: 100%; 
+            padding: 18px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        .btn:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        .info { 
+            margin-top: 30px; 
+            padding: 20px; 
+            background: #f0fdf4; 
+            border-radius: 10px;
+            border-left: 4px solid #22c55e;
+        }
+        .info h3 { color: #16a34a; margin-bottom: 15px; }
+        .info p { color: #166534; margin-bottom: 8px; line-height: 1.6; }
+        .error { 
+            background: #fef2f2; 
+            color: #dc2626; 
+            padding: 20px; 
+            border-radius: 10px;
+            border-left: 4px solid #dc2626;
+            margin-top: 20px;
+        }
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            margin-top: 30px;
+            font-size: 0.85rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🧾 Conversor XML a PDF - Ticket 80mm</h1>
+        <h1>🧾 Conversor XML a PDF</h1>
+        <p class="subtitle">ManchesterTex E.I.R.L. - Facturación Electrónica</p>
+        
         <div class="card">
             <form method="POST" action="/convertir" enctype="multipart/form-data">
                 <div class="form-group">
-                    <label for="xml_file">📤 Subir archivo XML:</label>
+                    <label for="xml_file">📤 Seleccionar archivo XML:</label>
                     <input type="file" name="xml_file" id="xml_file" accept=".xml" required>
                 </div>
+                
                 <div class="form-group">
                     <label for="formato">📋 Formato de salida:</label>
                     <select name="formato" id="formato">
                         <option value="ticket">Ticket 80mm</option>
                     </select>
                 </div>
+                
                 <button type="submit" class="btn">🔄 Convertir a PDF</button>
             </form>
             
             {% if info %}
             <div class="info">
-                <h3>📝 Información del documento</h3>
-                <p>{{ info }}</p>
+                <h3>✅ Documento generado exitosamente</h3>
+                <p><strong>Tipo:</strong> {{info.tipo}}</p>
+                <p><strong>Número:</strong> {{info.numero}}</p>
+                <p><strong>Emisor:</strong> {{info.emisor}}</p>
+                <p><strong>Cliente:</strong> {{info.cliente}}</p>
+                <p><strong>Total:</strong> {{info.total}}</p>
+                <p><strong>Fecha:</strong> {{info.fecha}}</p>
             </div>
             {% endif %}
             
@@ -616,6 +627,11 @@ HTML_TEMPLATE = """
             <div class="error">{{ error }}</div>
             {% endif %}
         </div>
+        
+        <p class="footer">
+            Sistema desarrollado por ManchesterTex E.I.R.L.<br>
+            © 2026 Todos los derechos reservados
+        </p>
     </div>
 </body>
 </html>
@@ -623,51 +639,75 @@ HTML_TEMPLATE = """
 
 
 @app.route('/')
+@log_request
 def index():
+    """Página principal"""
     return render_template_string(HTML_TEMPLATE)
 
 
 @app.route('/convertir', methods=['POST'])
+@log_request
 def convertir():
+    """Endpoint para convertir XML a PDF"""
     try:
+        # Validar archivo
         xml_file = request.files.get('xml_file')
-        formato = request.form.get('formato', 'ticket')
-        
         if not xml_file or xml_file.filename == '':
-            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, sube un archivo XML")
+            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, selecciona un archivo XML")
         
-        if not xml_file.filename.endswith('.xml'):
-            return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser XML")
+        if not xml_file.filename.lower().endswith('.xml'):
+            return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser de tipo XML (.xml)")
         
+        formato = request.form.get('formato', CONFIG['DEFAULT_FORMAT'])
+        
+        # Guardar archivo temporal
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
             xml_file.save(tmp_xml.name)
             xml_path = tmp_xml.name
         
+        # Procesar
         with tempfile.NamedTemporaryFile(delete=False, suffix='_ticket.pdf') as tmp_pdf:
             output_path = tmp_pdf.name
         
         factura = FacturaXMLtoPDF(xml_path, output_path)
         
-        if factura.parse_xml():
-            factura.generate_pdf(formato)
-            
-            info = f"""✅ CONVERSIÓN EXITOSA
-
-📄 Documento: {factura.data.get('tipo_documento', 'N/A')}
-🔢 Número: {factura.data.get('numero_factura', 'N/A')}
-🏢 Emisor: {factura.data.get('emisor_nombre', 'N/A')}
-👤 Cliente: {factura.data.get('cliente_nombre', 'N/A')}
-💰 Total: {factura.format_currency(factura.data.get('total_pagar', '0.00'))}
-📅 Fecha: {factura.data.get('fecha_emision', 'N/A')}"""
-            
-            return send_file(output_path, as_attachment=True, download_name=f"{factura.data.get('numero_factura', 'ticket')}.pdf")
-        else:
-            return render_template_string(HTML_TEMPLATE, error="❌ Error al procesar el XML")
-            
+        if not factura.parse_xml():
+            error_msg = factura.errors[0] if factura.errors else "Error al procesar el XML"
+            return render_template_string(HTML_TEMPLATE, error=f"❌ {error_msg}")
+        
+        factura.generate_pdf(formato)
+        
+        # Información del documento
+        info = {
+            'tipo': factura.data.get('tipo_documento', 'N/A'),
+            'numero': factura.data.get('numero_factura', 'N/A'),
+            'emisor': factura.data.get('emisor_nombre', 'N/A'),
+            'cliente': factura.data.get('cliente_nombre', 'N/A'),
+            'total': factura.format_currency(factura.data.get('total_pagar', '0.00')),
+            'fecha': factura.data.get('fecha_emision', 'N/A')
+        }
+        
+        # Descargar PDF
+        nombre_pdf = f"{factura.data.get('numero_factura', 'ticket')}.pdf"
+        return send_file(
+            output_path, 
+            as_attachment=True, 
+            download_name=nombre_pdf,
+            mimetype='application/pdf'
+        )
+        
     except Exception as e:
+        logger.exception("Error en conversión")
         return render_template_string(HTML_TEMPLATE, error=f"❌ Error: {str(e)}")
 
 
+@app.route('/health')
+def health():
+    """Health check"""
+    return jsonify({'status': 'ok', 'service': 'XML to PDF Converter'})
+
+
+# ========== MAIN ==========
 if __name__ == '__main__':
     os.makedirs("images", exist_ok=True)
     port = int(os.environ.get('PORT', 5000))
