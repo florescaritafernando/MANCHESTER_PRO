@@ -544,6 +544,57 @@ HTML_TEMPLATE = """
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             padding: 25px;
         }
+        .viewer-header {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .viewer-header .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+        @media (max-width: 1024px) {
+            .main-content {
+                flex-direction: column-reverse;
+            }
+            .right-panel {
+                width: 100%;
+            }
+            .left-panel {
+                min-height: 500px;
+            }
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            .subtitle {
+                font-size: 0.9rem;
+            }
+            .right-panel, .left-panel {
+                padding: 15px;
+                min-height: auto;
+            }
+            #pdf-viewer {
+                height: 400px;
+            }
+            .viewer-header {
+                flex-direction: column;
+            }
+            .viewer-header .btn {
+                width: 100%;
+            }
+            .info p {
+                font-size: 0.8rem;
+            }
+            .btn-group {
+                flex-direction: column;
+            }
+        }
         .form-group { margin-bottom: 20px; }
         label { 
             display: block; 
@@ -727,29 +778,11 @@ HTML_TEMPLATE = """
                     </div>
                     
                     <button type="submit" class="btn btn-convert" id="convertirBtn" disabled>🔄 Convertir a PDF</button>
-                </form>
-                
-{% if info %}
-                <div class="info">
-                    <h3>✅ Documento generado</h3>
-                    <p><strong>Tipo:</strong> {{info.tipo}}</p>
-                    <p><strong>Número:</strong> {{info.numero}}</p>
-                    <p><strong>Emisor:</strong> {{info.emisor}}</p>
-                    <p><strong>Cliente:</strong> {{info.cliente}}</p>
-                    <p><strong>Total:</strong> {{info.total}}</p>
-                    <p><strong>Fecha:</strong> {{info.fecha}}</p>
-                </div>
-                {% endif %}
-                
                 {% if pdf_base64 %}
-                <div class="btn-group">
+                <div class="viewer-header">
                     <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn btn-download">📥 Descargar PDF</a>
                     <a href="/" class="btn btn-clean">🗑️ Limpiar</a>
                 </div>
-                {% endif %}
-                
-                {% if error %}
-                <div class="error">{{ error }}</div>
                 {% endif %}
             </div>
             
@@ -800,11 +833,12 @@ HTML_TEMPLATE = """
     var viewer = new PDFGeneratorApi.PDFViewer({
         container: document.getElementById('pdf-viewer'),
         options: {
-            initialScale: PDFGeneratorApi.Scale.PageFit,
+            initialScale: PDFGeneratorApi.Scale.AutomaticZoom,
             print: true,
-            download: true,
+            download: false,
             search: true,
             scaleDropdown: true,
+            sidebar: false,
             toolbarFontSize: 14,
             toolbarIconSize: 20
         }
