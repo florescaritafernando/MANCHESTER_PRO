@@ -398,10 +398,11 @@ class FacturaXMLtoPDF:
         pdf.set_font("Arial", '', 7)
         
         headers = ["COD.", "CANT.", "UNID.", "DESCRIPCIÓN", "V.UNIT.", "V.VENTA"]
+
+        pdf.ln(1)
+
         for i, h in enumerate(headers):
             pdf.cell(anchuras[i], 1, h, 1, 0, 'C')
-        pdf.ln(1)
-        pdf.cell(0, 1, "", "T", 1)
         pdf.ln(1)
         
         pdf.set_font("Arial", '', 8)
@@ -492,6 +493,7 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🧾 Conversor XML a PDF - ManchesterTex</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -580,15 +582,8 @@ HTML_TEMPLATE = """
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
         }
-        .btn-print {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-        .btn-download {
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        }
-        .btn-secondary {
-            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        }
+        .btn-print { background: #10b981; }
+        .btn-download { background: #3b82f6; }
         .btn-group {
             display: flex;
             gap: 10px;
@@ -599,6 +594,44 @@ HTML_TEMPLATE = """
             padding: 12px;
             font-size: 0.9rem;
         }
+        #pdf-viewer {
+            width: 100%;
+            height: 520px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .pdf-page {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+        .pdf-page canvas {
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            background: white;
+        }
+        .viewer-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            padding: 15px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .viewer-controls button {
+            padding: 8px 16px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .viewer-controls button:hover { background: #4338ca; }
+        .viewer-controls button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .viewer-controls span { font-weight: 600; color: #374151; }
         .info { 
             margin-top: 20px; 
             padding: 20px; 
@@ -615,20 +648,6 @@ HTML_TEMPLATE = """
             border-radius: 10px;
             border-left: 4px solid #dc2626;
             margin-top: 20px;
-        }
-        .preview-area {
-            background: #eff6ff;
-            border-radius: 10px;
-            border: 2px solid #3b82f6;
-            padding: 15px;
-            min-height: 500px;
-        }
-        .preview-area h3 { color: #1d4ed8; margin-bottom: 15px; }
-        .preview-area iframe { 
-            border-radius: 8px; 
-            border: 1px solid #93c5fd;
-            width: 100%;
-            height: 480px;
         }
         .empty-state {
             text-align: center;
@@ -652,9 +671,15 @@ HTML_TEMPLATE = """
         <div class="main-content">
             <div class="left-panel">
                 {% if pdf_base64 %}
-                <div class="preview-area">
-                    <h3>📄 Vista previa del PDF</h3>
-                    <iframe id="pdfFrame" src="data:application/pdf;base64,{{pdf_base64}}#toolbar=0&navpanes=0"></iframe>
+                <div class="viewer-controls">
+                    <button id="prevBtn" onclick="changePage(-1)">◀ Anterior</button>
+                    <span>Página <span id="currentPage">1</span> de <span id="totalPages">-</span></span>
+                    <button id="nextBtn" onclick="changePage(1)">Siguiente ▶</button>
+                </div>
+                <div id="pdf-viewer">
+                    <div class="pdf-page">
+                        <canvas id="pdf-canvas"></canvas>
+                    </div>
                 </div>
                 {% else %}
                 <div class="empty-state">
@@ -668,7 +693,7 @@ HTML_TEMPLATE = """
                 <form method="POST" action="/convertir" enctype="multipart/form-data">
                     <div class="form-group">
                         <label for="xml_file">📤 Seleccionar archivo XML:</label>
-                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required>
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="this.form.submit()">
                     </div>
                     
                     <div class="form-group">
@@ -677,8 +702,6 @@ HTML_TEMPLATE = """
                             <option value="ticket">Ticket 80mm</option>
                         </select>
                     </div>
-                    
-                    <button type="submit" class="btn">🔄 Convertir a PDF</button>
                 </form>
                 
 {% if info %}
@@ -712,17 +735,67 @@ HTML_TEMPLATE = """
         </p>
     </div>
     
+    {% if pdf_base64 %}
     <script>
-    function imprimirPDF() {
-        var iframe = document.getElementById('pdfFrame');
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.focus();
-            iframe.contentWindow.print();
-        } else {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
+        var pdfDoc = null;
+        var pageNum = 1;
+        var pageRendering = false;
+        var pageQueue = null;
+        var scale = 1.5;
+        var canvas = document.getElementById('pdf-canvas');
+        var ctx = canvas.getContext('2d');
+        
+        var b64 = "{{pdf_base64}}";
+        var binary = atob(b64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        
+        pdfjsLib.getDocument(bytes).promise.then(function(pdf) {
+            pdfDoc = pdf;
+            document.getElementById('totalPages').textContent = pdf.numPages;
+            renderPage(pageNum);
+        });
+        
+        function renderPage(num) {
+            pageRendering = true;
+            pdfDoc.getPage(num).then(function(page) {
+                var viewport = page.getViewport({scale: scale});
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                var renderCtx = {canvasContext: ctx, viewport: viewport};
+                page.render(renderCtx).promise.then(function() {
+                    pageRendering = false;
+                    if (pageQueue) {
+                        renderPage(pageQueue);
+                        pageQueue = null;
+                    }
+                });
+            });
+            
+            document.getElementById('currentPage').textContent = num;
+            document.getElementById('prevBtn').disabled = (num <= 1);
+            document.getElementById('nextBtn').disabled = (num >= pdfDoc.numPages);
+        }
+        
+        function changePage(offset) {
+            if (pageRendering) {
+                pageQueue = pageNum + offset;
+            } else {
+                pageNum += offset;
+                renderPage(pageNum);
+            }
+        }
+        
+        function imprimirPDF() {
             window.print();
         }
-    }
     </script>
+    {% endif %}
 </body>
 </html>
 """
