@@ -401,6 +401,8 @@ class FacturaXMLtoPDF:
         for i, h in enumerate(headers):
             pdf.cell(anchuras[i], 1, h, 1, 0, 'C')
         pdf.ln(1)
+        pdf.cell(0, 1, "", "T", 1)
+        pdf.ln(1)
         
         pdf.set_font("Arial", '', 8)
         for item in self.data.get('items', []):
@@ -498,7 +500,7 @@ HTML_TEMPLATE = """
             min-height: 100vh;
             padding: 20px;
         }
-        .container { max-width: 800px; margin: 0 auto; }
+        .container { max-width: 1400px; margin: 0 auto; }
         h1 { 
             color: white; 
             text-align: center; 
@@ -512,11 +514,25 @@ HTML_TEMPLATE = """
             margin-bottom: 30px;
             font-size: 1rem;
         }
-        .card { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 16px; 
+        .main-content {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        .left-panel {
+            flex: 1;
+            background: white;
+            border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 20px;
+            min-height: 600px;
+        }
+        .right-panel {
+            width: 350px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
         }
         .form-group { margin-bottom: 25px; }
         label { 
@@ -564,8 +580,27 @@ HTML_TEMPLATE = """
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
         }
+        .btn-print {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        .btn-download {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        }
+        .btn-secondary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn-group .btn {
+            flex: 1;
+            padding: 12px;
+            font-size: 0.9rem;
+        }
         .info { 
-            margin-top: 30px; 
+            margin-top: 20px; 
             padding: 20px; 
             background: #f0fdf4; 
             border-radius: 10px;
@@ -581,19 +616,26 @@ HTML_TEMPLATE = """
             border-left: 4px solid #dc2626;
             margin-top: 20px;
         }
-        .preview { 
-            margin-top: 30px; 
-            padding: 20px; 
-            background: #eff6ff; 
+        .preview-area {
+            background: #eff6ff;
             border-radius: 10px;
             border: 2px solid #3b82f6;
+            padding: 15px;
+            min-height: 500px;
         }
-        .preview h3 { color: #1d4ed8; margin-bottom: 15px; }
-        .preview iframe { 
+        .preview-area h3 { color: #1d4ed8; margin-bottom: 15px; }
+        .preview-area iframe { 
             border-radius: 8px; 
             border: 1px solid #93c5fd;
-            margin-bottom: 15px;
+            width: 100%;
+            height: 480px;
         }
+        .empty-state {
+            text-align: center;
+            color: #9ca3af;
+            padding: 100px 20px;
+        }
+        .empty-state h2 { margin-bottom: 10px; }
         .footer {
             text-align: center;
             color: rgba(255,255,255,0.7);
@@ -607,46 +649,61 @@ HTML_TEMPLATE = """
         <h1>🧾 Conversor XML a PDF</h1>
         <p class="subtitle">ManchesterTex E.I.R.L. - Facturación Electrónica</p>
         
-        <div class="card">
-            <form method="POST" action="/convertir" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="xml_file">📤 Seleccionar archivo XML:</label>
-                    <input type="file" name="xml_file" id="xml_file" accept=".xml" required>
+        <div class="main-content">
+            <div class="left-panel">
+                {% if pdf_base64 %}
+                <div class="preview-area">
+                    <h3>📄 Vista previa del PDF</h3>
+                    <iframe id="pdfFrame" src="data:application/pdf;base64,{{pdf_base64}}#toolbar=0&navpanes=0"></iframe>
                 </div>
-                
-                <div class="form-group">
-                    <label for="formato">📋 Formato de salida:</label>
-                    <select name="formato" id="formato">
-                        <option value="ticket">Ticket 80mm</option>
-                    </select>
+                {% else %}
+                <div class="empty-state">
+                    <h2>👈 Esperando documento</h2>
+                    <p>Sube un archivo XML desde el panel derecho para comenzar</p>
                 </div>
-                
-                <button type="submit" class="btn">🔄 Convertir a PDF</button>
-            </form>
+                {% endif %}
+            </div>
             
+            <div class="right-panel">
+                <form method="POST" action="/convertir" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="xml_file">📤 Seleccionar archivo XML:</label>
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="formato">📋 Formato de salida:</label>
+                        <select name="formato" id="formato">
+                            <option value="ticket">Ticket 80mm</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn">🔄 Convertir a PDF</button>
+                </form>
+                
 {% if info %}
-            <div class="info">
-                <h3>✅ Documento generado</h3>
-                <p><strong>Tipo:</strong> {{info.tipo}}</p>
-                <p><strong>Número:</strong> {{info.numero}}</p>
-                <p><strong>Emisor:</strong> {{info.emisor}}</p>
-                <p><strong>Cliente:</strong> {{info.cliente}}</p>
-                <p><strong>Total:</strong> {{info.total}}</p>
-                <p><strong>Fecha:</strong> {{info.fecha}}</p>
+                <div class="info">
+                    <h3>✅ Documento generado</h3>
+                    <p><strong>Tipo:</strong> {{info.tipo}}</p>
+                    <p><strong>Número:</strong> {{info.numero}}</p>
+                    <p><strong>Emisor:</strong> {{info.emisor}}</p>
+                    <p><strong>Cliente:</strong> {{info.cliente}}</p>
+                    <p><strong>Total:</strong> {{info.total}}</p>
+                    <p><strong>Fecha:</strong> {{info.fecha}}</p>
+                </div>
+                {% endif %}
+                
+                {% if pdf_base64 %}
+                <div class="btn-group">
+                    <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn btn-download">📥 Descargar</a>
+                    <button type="button" class="btn btn-print" onclick="imprimirPDF()">🖨️ Imprimir</button>
+                </div>
+                {% endif %}
+                
+                {% if error %}
+                <div class="error">{{ error }}</div>
+                {% endif %}
             </div>
-            {% endif %}
-            
-            {% if pdf_base64 %}
-            <div class="preview">
-                <h3>📄 Vista previa del PDF</h3>
-                <iframe src="data:application/pdf;base64,{{pdf_base64}}#toolbar=0&navpanes=0" width="100%" height="500"></iframe>
-                <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn">📥 Descargar PDF</a>
-            </div>
-            {% endif %}
-            
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
         </div>
         
         <p class="footer">
@@ -654,6 +711,18 @@ HTML_TEMPLATE = """
             © 2026 Todos los derechos reservados
         </p>
     </div>
+    
+    <script>
+    function imprimirPDF() {
+        var iframe = document.getElementById('pdfFrame');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+        } else {
+            window.print();
+        }
+    }
+    </script>
 </body>
 </html>
 """
