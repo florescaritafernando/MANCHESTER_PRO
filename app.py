@@ -570,37 +570,51 @@ HTML_TEMPLATE = """
             border: 2px dashed #cbd5e1;
             color: #9ca3af;
         }
-        input[type="file"] { 
-            position: absolute;
-            opacity: 0;
+        .file-input {
+            display: block;
             width: 100%;
-            height: 100%;
-            cursor: pointer;
-        }
-        .file-drop-area {
-            position: relative;
-            padding: 20px;
+            padding: 15px;
             border: 2px dashed #cbd5e1;
             border-radius: 10px;
             background: #f8fafc;
-            text-align: center;
+            cursor: pointer;
             transition: all 0.3s;
-            min-height: 80px;
-        }
-        .file-drop-area:hover {
-            border-color: #667eea;
-            background: #f1f5f9;
-        }
-        .file-drop-area.has-file {
-            border-color: #22c55e;
-            background: #f0fdf4;
-        }
-        .file-drop-text {
+            text-align: center;
             color: #64748b;
             font-size: 0.9rem;
         }
-        .file-drop-area.has-file .file-drop-text {
+        .file-input:hover {
+            border-color: #667eea;
+            background: #f1f5f9;
+        }
+        .file-input.has-file {
+            border-color: #22c55e;
+            background: #f0fdf4;
+            color: #166534;
+        }
+        input[type="file"] {
             display: none;
+        }
+        .file-label {
+            display: block;
+            padding: 15px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 10px;
+            background: #f8fafc;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        .file-label:hover {
+            border-color: #667eea;
+            background: #f1f5f9;
+        }
+        .file-label.active {
+            border-color: #22c55e;
+            background: #f0fdf4;
+            color: #166534;
         }
         select { 
             width: 100%; 
@@ -694,34 +708,22 @@ HTML_TEMPLATE = """
         <p class="subtitle">ManchesterTex E.I.R.L. - Facturación Electrónica</p>
         
         <div class="main-content">
-            <div class="left-panel">
-                {% if pdf_base64 %}
-                <div id="pdf-viewer"></div>
-                {% else %}
-                <div class="empty-state">
-                    <h2>📄 Esperando documento</h2>
-                    <p>Sube un archivo XML para previsualizar el PDF</p>
-                </div>
-                {% endif %}
-            </div>
-            
             <div class="right-panel">
                 <form id="convertirForm" method="POST" action="/convertir" enctype="multipart/form-data">
                     <div class="form-group">
                         <label>📤 Seleccionar archivo XML:</label>
-                        <div class="file-drop-area" id="fileDropArea">
-                            <span class="file-drop-text" id="fileDropText">Haz clic o arrastra el archivo XML aquí</span>
-                            <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="updateFileName()">
-                        </div>
+                        <label for="xml_file" class="file-label" id="fileLabel">
+                            Haz clic para seleccionar archivo XML
+                        </label>
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="updateFileName()">
                         <div class="file-name empty" id="fileName">Ningún archivo seleccionado</div>
                     </div>
                     
                     <div class="form-group">
                         <label for="formato">📋 Formato de salida:</label>
-                        <select name="formato" id="formato" onchange="document.getElementById('hiddenFormato').value = this.value;">
+                        <select name="formato" id="formato">
                             <option value="ticket">Ticket 80mm</option>
                         </select>
-                        <input type="hidden" name="formato" id="hiddenFormato" value="ticket">
                     </div>
                     
                     <button type="submit" class="btn btn-convert" id="convertirBtn" disabled>🔄 Convertir a PDF</button>
@@ -750,6 +752,17 @@ HTML_TEMPLATE = """
                 <div class="error">{{ error }}</div>
                 {% endif %}
             </div>
+            
+            <div class="left-panel">
+                {% if pdf_base64 %}
+                <div id="pdf-viewer"></div>
+                {% else %}
+                <div class="empty-state">
+                    <h2>📄 Esperando documento</h2>
+                    <p>Sube un archivo XML para previsualizar el PDF</p>
+                </div>
+                {% endif %}
+            </div>
         </div>
         
         <p class="footer">
@@ -762,22 +775,21 @@ HTML_TEMPLATE = """
     function updateFileName() {
         var input = document.getElementById('xml_file');
         var fileName = document.getElementById('fileName');
-        var fileDropArea = document.getElementById('fileDropArea');
-        var fileDropText = document.getElementById('fileDropText');
+        var fileLabel = document.getElementById('fileLabel');
         var convertirBtn = document.getElementById('convertirBtn');
         
         if (input.files && input.files[0]) {
             var name = input.files[0].name;
             fileName.textContent = name;
             fileName.classList.remove('empty');
-            fileDropArea.classList.add('has-file');
-            fileDropText.textContent = name;
+            fileLabel.textContent = name;
+            fileLabel.classList.add('active');
             convertirBtn.disabled = false;
         } else {
             fileName.textContent = 'Ningún archivo seleccionado';
             fileName.classList.add('empty');
-            fileDropArea.classList.remove('has-file');
-            fileDropText.textContent = 'Haz clic o arrastra el archivo XML aquí';
+            fileLabel.textContent = 'Haz clic para seleccionar archivo XML';
+            fileLabel.classList.remove('active');
             convertirBtn.disabled = true;
         }
     }
