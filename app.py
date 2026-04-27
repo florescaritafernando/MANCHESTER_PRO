@@ -394,16 +394,24 @@ class FacturaXMLtoPDF:
         
         # Tabla de items
         anchuras = [8, 14, 10, 22, 10, 16]
+        original_color = pdf.draw_color
         pdf.set_draw_color(255, 255, 255)
         pdf.set_font("Arial", '', 7)
         
         headers = ["COD.", "CANT.", "UNID.", "DESCRIPCIÓN", "V.UNIT.", "V.VENTA"]
 
-        pdf.ln(1)
-
         for i, h in enumerate(headers):
             pdf.cell(anchuras[i], 1, h, 1, 0, 'C')
-        pdf.ln(1)
+        
+        pdf.set_draw_color(original_color)
+
+        pdf.ln(2)
+        pdf.cell(0, 2, "", "T", 1)
+        
+        
+        pdf.set_font("Arial", '', 8)
+        
+        pdf.set_draw_color(255, 255, 255)
         
         pdf.set_font("Arial", '', 8)
         for item in self.data.get('items', []):
