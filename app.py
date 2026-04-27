@@ -851,11 +851,12 @@ def convertir():
             pdf_data = f.read()
             pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
         
-        # Nombre del archivo PDF: NRO_COMPROBANTE_CLIENTE_RUC_TIPO_FORMATO
+        # Nombre del archivo PDF: NUMERO_NOMBRE_CLIENTE_TIPO_FORMATO.pdf
         numero = factura.data.get('numero_factura', 'documento')
-        cliente_ruc = factura.data.get('cliente_ID', 'sinruc')
+        cliente_nombre = factura.data.get('cliente_nombre', 'cliente').replace(' ', '_')
+        cliente_nombre = ''.join(c for c in cliente_nombre if c.isalnum() or c == '_')
         tipo_doc = factura.data.get('tipo_documento', 'COMPROBANTE').replace(' ', '')
-        pdf_name = f"{numero}_{cliente_ruc}_{tipo_doc}_{formato}.pdf"
+        pdf_name = f"{numero}_{cliente_nombre}_{tipo_doc}_{formato}.pdf"
         
         # Información del documento
         info = {
@@ -863,7 +864,6 @@ def convertir():
             'numero': numero,
             'emisor': factura.data.get('emisor_nombre', 'N/A'),
             'cliente': factura.data.get('cliente_nombre', 'N/A'),
-            'cliente_ruc': cliente_ruc,
             'total': factura.format_currency(factura.data.get('total_pagar', '0.00')),
             'fecha': factura.data.get('fecha_emision', 'N/A')
         }
