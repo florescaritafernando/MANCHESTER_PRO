@@ -500,8 +500,8 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🧾 Conversor XML a PDF - ManchesterTex</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <title>Conversor XML a PDF - ManchesterTex</title>
+    <script src="https://unpkg.com/pdf-generator-api-pdfviewer@latest/dist/PDFViewer.iife.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -538,32 +538,69 @@ HTML_TEMPLATE = """
             min-height: 600px;
         }
         .right-panel {
-            width: 350px;
+            width: 380px;
             background: white;
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 30px;
+            padding: 25px;
         }
-        .form-group { margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
         label { 
             display: block; 
-            margin-bottom: 10px; 
+            margin-bottom: 8px; 
             font-weight: 600; 
             color: #374151;
             font-size: 0.95rem;
         }
+        .file-input-wrapper {
+            position: relative;
+        }
+        .file-name {
+            display: block;
+            padding: 12px 15px;
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+            border-radius: 10px;
+            color: #166534;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .file-name.empty {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            color: #9ca3af;
+        }
         input[type="file"] { 
-            width: 100%; 
-            padding: 15px; 
-            border: 2px dashed #cbd5e1; 
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .file-drop-area {
+            position: relative;
+            padding: 20px;
+            border: 2px dashed #cbd5e1;
             border-radius: 10px;
             background: #f8fafc;
-            cursor: pointer;
+            text-align: center;
             transition: all 0.3s;
+            min-height: 80px;
         }
-        input[type="file"]:hover {
+        .file-drop-area:hover {
             border-color: #667eea;
             background: #f1f5f9;
+        }
+        .file-drop-area.has-file {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+        .file-drop-text {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        .file-drop-area.has-file .file-drop-text {
+            display: none;
         }
         select { 
             width: 100%; 
@@ -575,23 +612,33 @@ HTML_TEMPLATE = """
         }
         .btn { 
             width: 100%; 
-            padding: 18px; 
+            padding: 15px; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; 
             border: none; 
             border-radius: 10px; 
-            font-size: 1.1rem; 
-            font-weight: 700; 
+            font-size: 1rem; 
+            font-weight: 600; 
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
-            margin-top: 10px;
         }
         .btn:hover { 
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
         }
-        .btn-print { background: #10b981; }
-        .btn-download { background: #3b82f6; }
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-convert { margin-top: 10px; }
+        .btn-download { 
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        }
+        .btn-clean { 
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
         .btn-group {
             display: flex;
             gap: 10px;
@@ -604,42 +651,10 @@ HTML_TEMPLATE = """
         }
         #pdf-viewer {
             width: 100%;
-            height: 520px;
-            background: #f3f4f6;
+            height: 550px;
             border-radius: 8px;
             overflow: hidden;
         }
-        .pdf-page {
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-        }
-        .pdf-page canvas {
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-            background: white;
-        }
-        .viewer-controls {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-            padding: 15px;
-            background: #f1f5f9;
-            border-radius: 8px;
-            margin-bottom: 15px;
-        }
-        .viewer-controls button {
-            padding: 8px 16px;
-            background: #4f46e5;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-        }
-        .viewer-controls button:hover { background: #4338ca; }
-        .viewer-controls button:disabled { background: #9ca3af; cursor: not-allowed; }
-        .viewer-controls span { font-weight: 600; color: #374151; }
         .info { 
             margin-top: 20px; 
             padding: 20px; 
@@ -647,22 +662,24 @@ HTML_TEMPLATE = """
             border-radius: 10px;
             border-left: 4px solid #22c55e;
         }
-        .info h3 { color: #16a34a; margin-bottom: 15px; }
-        .info p { color: #166534; margin-bottom: 8px; line-height: 1.6; }
+        .info h3 { color: #16a34a; margin-bottom: 12px; font-size: 1rem; }
+        .info p { color: #166534; margin-bottom: 6px; line-height: 1.5; font-size: 0.9rem; }
+        .info strong { display: inline-block; width: 80px; }
         .error { 
             background: #fef2f2; 
             color: #dc2626; 
-            padding: 20px; 
+            padding: 15px; 
             border-radius: 10px;
             border-left: 4px solid #dc2626;
-            margin-top: 20px;
+            margin-top: 15px;
+            font-size: 0.9rem;
         }
         .empty-state {
             text-align: center;
             color: #9ca3af;
-            padding: 100px 20px;
+            padding: 120px 20px;
         }
-        .empty-state h2 { margin-bottom: 10px; }
+        .empty-state h2 { margin-bottom: 10px; color: #6b7280; }
         .footer {
             text-align: center;
             color: rgba(255,255,255,0.7);
@@ -679,37 +696,35 @@ HTML_TEMPLATE = """
         <div class="main-content">
             <div class="left-panel">
                 {% if pdf_base64 %}
-                <div class="viewer-controls">
-                    <button id="prevBtn" onclick="changePage(-1)">◀ Anterior</button>
-                    <span>Página <span id="currentPage">1</span> de <span id="totalPages">-</span></span>
-                    <button id="nextBtn" onclick="changePage(1)">Siguiente ▶</button>
-                </div>
-                <div id="pdf-viewer">
-                    <div class="pdf-page">
-                        <canvas id="pdf-canvas"></canvas>
-                    </div>
-                </div>
+                <div id="pdf-viewer"></div>
                 {% else %}
                 <div class="empty-state">
-                    <h2>👈 Esperando documento</h2>
-                    <p>Sube un archivo XML desde el panel derecho para comenzar</p>
+                    <h2>📄 Esperando documento</h2>
+                    <p>Sube un archivo XML para previsualizar el PDF</p>
                 </div>
                 {% endif %}
             </div>
             
             <div class="right-panel">
-                <form method="POST" action="/convertir" enctype="multipart/form-data">
+                <form id="convertirForm" method="POST" action="/convertir" enctype="multipart/form-data">
                     <div class="form-group">
-                        <label for="xml_file">📤 Seleccionar archivo XML:</label>
-                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="this.form.submit()">
+                        <label>📤 Seleccionar archivo XML:</label>
+                        <div class="file-drop-area" id="fileDropArea">
+                            <span class="file-drop-text" id="fileDropText">Haz clic o arrastra el archivo XML aquí</span>
+                            <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="updateFileName()">
+                        </div>
+                        <div class="file-name empty" id="fileName">Ningún archivo seleccionado</div>
                     </div>
                     
                     <div class="form-group">
                         <label for="formato">📋 Formato de salida:</label>
-                        <select name="formato" id="formato">
+                        <select name="formato" id="formato" onchange="document.getElementById('hiddenFormato').value = this.value;">
                             <option value="ticket">Ticket 80mm</option>
                         </select>
+                        <input type="hidden" name="formato" id="hiddenFormato" value="ticket">
                     </div>
+                    
+                    <button type="submit" class="btn btn-convert" id="convertirBtn" disabled>🔄 Convertir a PDF</button>
                 </form>
                 
 {% if info %}
@@ -726,8 +741,8 @@ HTML_TEMPLATE = """
                 
                 {% if pdf_base64 %}
                 <div class="btn-group">
-                    <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn btn-download">📥 Descargar</a>
-                    <button type="button" class="btn btn-print" onclick="imprimirPDF()">🖨️ Imprimir</button>
+                    <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn btn-download">📥 Descargar PDF</a>
+                    <a href="/" class="btn btn-clean">🗑️ Limpiar</a>
                 </div>
                 {% endif %}
                 
@@ -743,65 +758,48 @@ HTML_TEMPLATE = """
         </p>
     </div>
     
+    <script>
+    function updateFileName() {
+        var input = document.getElementById('xml_file');
+        var fileName = document.getElementById('fileName');
+        var fileDropArea = document.getElementById('fileDropArea');
+        var fileDropText = document.getElementById('fileDropText');
+        var convertirBtn = document.getElementById('convertirBtn');
+        
+        if (input.files && input.files[0]) {
+            var name = input.files[0].name;
+            fileName.textContent = name;
+            fileName.classList.remove('empty');
+            fileDropArea.classList.add('has-file');
+            fileDropText.textContent = name;
+            convertirBtn.disabled = false;
+        } else {
+            fileName.textContent = 'Ningún archivo seleccionado';
+            fileName.classList.add('empty');
+            fileDropArea.classList.remove('has-file');
+            fileDropText.textContent = 'Haz clic o arrastra el archivo XML aquí';
+            convertirBtn.disabled = true;
+        }
+    }
+    </script>
+    
     {% if pdf_base64 %}
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        
-        var pdfDoc = null;
-        var pageNum = 1;
-        var pageRendering = false;
-        var pageQueue = null;
-        var scale = 1.5;
-        var canvas = document.getElementById('pdf-canvas');
-        var ctx = canvas.getContext('2d');
-        
-        var b64 = "{{pdf_base64}}";
-        var binary = atob(b64);
-        var bytes = new Uint8Array(binary.length);
-        for (var i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
+    var viewer = new PDFGeneratorApi.PDFViewer({
+        container: document.getElementById('pdf-viewer'),
+        options: {
+            initialScale: PDFGeneratorApi.Scale.PageFit,
+            print: true,
+            download: true,
+            search: true,
+            scaleDropdown: true,
+            toolbarFontSize: 14,
+            toolbarIconSize: 20
         }
-        
-        pdfjsLib.getDocument(bytes).promise.then(function(pdf) {
-            pdfDoc = pdf;
-            document.getElementById('totalPages').textContent = pdf.numPages;
-            renderPage(pageNum);
-        });
-        
-        function renderPage(num) {
-            pageRendering = true;
-            pdfDoc.getPage(num).then(function(page) {
-                var viewport = page.getViewport({scale: scale});
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                
-                var renderCtx = {canvasContext: ctx, viewport: viewport};
-                page.render(renderCtx).promise.then(function() {
-                    pageRendering = false;
-                    if (pageQueue) {
-                        renderPage(pageQueue);
-                        pageQueue = null;
-                    }
-                });
-            });
-            
-            document.getElementById('currentPage').textContent = num;
-            document.getElementById('prevBtn').disabled = (num <= 1);
-            document.getElementById('nextBtn').disabled = (num >= pdfDoc.numPages);
-        }
-        
-        function changePage(offset) {
-            if (pageRendering) {
-                pageQueue = pageNum + offset;
-            } else {
-                pageNum += offset;
-                renderPage(pageNum);
-            }
-        }
-        
-        function imprimirPDF() {
-            window.print();
-        }
+    });
+    
+    var b64 = "{{pdf_base64}}";
+    viewer.loadBase64(b64);
     </script>
     {% endif %}
 </body>
@@ -853,18 +851,25 @@ def convertir():
             pdf_data = f.read()
             pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
         
+        # Nombre del archivo PDF: NRO_COMPROBANTE_CLIENTE_RUC_TIPO_FORMATO
+        numero = factura.data.get('numero_factura', 'documento')
+        cliente_ruc = factura.data.get('cliente_ID', 'sinruc')
+        tipo_doc = factura.data.get('tipo_documento', 'COMPROBANTE').replace(' ', '')
+        pdf_name = f"{numero}_{cliente_ruc}_{tipo_doc}_{formato}.pdf"
+        
         # Información del documento
         info = {
             'tipo': factura.data.get('tipo_documento', 'N/A'),
-            'numero': factura.data.get('numero_factura', 'N/A'),
+            'numero': numero,
             'emisor': factura.data.get('emisor_nombre', 'N/A'),
             'cliente': factura.data.get('cliente_nombre', 'N/A'),
+            'cliente_ruc': cliente_ruc,
             'total': factura.format_currency(factura.data.get('total_pagar', '0.00')),
             'fecha': factura.data.get('fecha_emision', 'N/A')
         }
         
         # Retornar con vista previa
-        return render_template_string(HTML_TEMPLATE, pdf_base64=pdf_base64, info=info, pdf_name=f"{factura.data.get('numero_factura', 'ticket')}.pdf")
+        return render_template_string(HTML_TEMPLATE, pdf_base64=pdf_base64, info=info, pdf_name=pdf_name)
         
     except Exception as e:
         logger.exception("Error en conversión")
