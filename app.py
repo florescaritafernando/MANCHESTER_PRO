@@ -1,15 +1,14 @@
 import xml.etree.ElementTree as ET
 from fpdf import FPDF
 import os
+import gradio as gr
 import tempfile
 from typing import Tuple, Dict, Any
 import base64
 from datetime import datetime
 import qrcode
-from flask import Flask, request, send_file, render_template_string, jsonify
-import io
+import urllib.parse
 
-app = Flask(__name__)
 
 class FacturaXMLtoPDF:
     def __init__(self, xml_path, output_path, extra_data: Dict[str, Any] = None):
@@ -543,7 +542,9 @@ class FacturaXMLtoPDF:
                 image_path = f"images/{ruc_emisor}.png"
             
             image_width = 30
-            image_x = (float(self.page_width) - float(image_width)) / 2
+            page_w = float(self.page_width)
+            image_w = float(image_width)
+            image_x = (page_w - image_w) / 2
             try:
                 if os.path.exists(image_path):
                     pdf.image(image_path, x=image_x, y=pdf.get_y(), w=image_width)
@@ -560,116 +561,206 @@ class FacturaXMLtoPDF:
         print(f"PDF generado: {self.output_path} (Ticket 80mm)")
 
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversor XML a PDF - Ticket 80mm</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { color: #2563eb; text-align: center; margin-bottom: 30px; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #374151; }
-        input[type="file"] { width: 100%; padding: 12px; border: 2px dashed #e0e0e0; border-radius: 8px; }
-        .btn { width: 100%; padding: 15px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
-        .btn:hover { background: #45a049; }
-        .btn-secondary { background: #6b7280; margin-top: 10px; }
-        .btn-secondary:hover { background: #5b5f6a; }
-        .info { margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 8px; }
-        .info h3 { color: #059669; margin-bottom: 15px; }
-        .info p { margin-bottom: 8px; line-height: 1.6; }
-        .error { background: #fee2e2; color: #dc2626; padding: 15px; border-radius: 8px; margin-top: 20px; }
-        .success { background: #d1fae5; color: #059669; padding: 15px; border-radius: 8px; margin-top: 20px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🧾 Conversor XML a PDF - Ticket 80mm</h1>
-        <div class="card">
-            <form method="POST" action="/convertir" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="xml_file">📤 Subir archivo XML:</label>
-                    <input type="file" name="xml_file" id="xml_file" accept=".xml" required>
-                </div>
-                <div class="form-group">
-                    <label for="formato">📋 Formato de salida:</label>
-                    <select name="formato" id="formato" style="width:100%; padding:12px; border-radius:8px; border:1px solid #e0e0e0;">
-                        <option value="ticket">Ticket 80mm</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn">🔄 Convertir a PDF</button>
-            </form>
-            
-            {% if info %}
-            <div class="info">
-                <h3>📝 Información del documento</h3>
-                <p>{{ info }}</p>
-            </div>
-            {% endif %}
-            
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-        </div>
-    </div>
-</body>
-</html>
-"""
+def process_xml(xml_file, output_format, agency_name="", other_notes="", cliente_nombre_manual="", cliente_id_manual="", direccion_envio_manual="", agencia_manual="", otros_manual="") -> Tuple[str, str, str, str]:
+    if xml_file is None:
+        return (
+            "<div class='preview-box'><p style='color: #94a3b8; text-align: center;'>Esperando archivo XML...</p></div>",
+            None,
+            "Por favor, sube un archivo XML para comenzar",
+            None
+        )
 
-
-@app.route('/', methods=['GET'])
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-
-@app.route('/convertir', methods=['POST'])
-def convertir():
     try:
-        xml_file = request.files.get('xml_file')
-        formato = request.form.get('formato', 'ticket')
-        
-        if not xml_file or xml_file.filename == '':
-            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, sube un archivo XML")
-        
-        if not xml_file.filename.endswith('.xml'):
-            return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser XML")
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
-            xml_file.save(tmp_xml.name)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as tmp_xml:
+            with open(xml_file.name, "rb") as f:
+                tmp_xml.write(f.read())
             xml_path = tmp_xml.name
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix='_ticket.pdf') as tmp_pdf:
-            output_path = tmp_pdf.name
-        
-        factura = FacturaXMLtoPDF(xml_path, output_path)
-        
-        if factura.parse_xml():
-            factura.generate_pdf(formato)
-            
-            info = f"""
-✅ CONVERSIÓN EXITOSA
 
-📄 Documento: {factura.data.get('tipo_documento', 'N/A')}
-🔢 Número: {factura.data.get('numero_factura', 'N/A')}
-🏢 Emisor: {factura.data.get('emisor_nombre', 'N/A')}
-👤 Cliente: {factura.data.get('cliente_nombre', 'N/A')}
-💰 Total: {factura.format_currency(factura.data.get('total_pagar', '0.00'))}
-📅 Fecha: {factura.data.get('fecha_emision', 'N/A')}
+        pdf_suffix = '_ticket.pdf'
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=pdf_suffix) as tmp_pdf:
+            output_path = tmp_pdf.name
+            
+        extra_data = {
+            'agency_name': agency_name,
+            'other_notes': other_notes,
+            'cliente_nombre_manual': cliente_nombre_manual,
+            'cliente_id_manual': cliente_id_manual,
+            'direccion_envio_manual': direccion_envio_manual,
+            'agencia_manual': agencia_manual,
+            'otros_manual': otros_manual
+        }
+
+        factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
+        if factura.parse_xml():
+            factura.generate_pdf(output_format)
+
+            info = f"""CONVERSIÓN EXITOSA (Formato: {output_format.upper()})
+Documento: {factura.data.get('tipo_documento', 'N/A')}
+Número: {factura.data.get('numero_factura', 'N/A')}
+Emisor: {factura.data.get('emisor_nombre', 'N/A')}
+Cliente: {factura.data.get('cliente_nombre', 'N/A')}
+Total: {factura.format_currency(factura.data.get('total_pagar', '0.00'))}"""
+
+            with open(output_path, "rb") as pdf_file:
+                pdf_data = pdf_file.read()
+                pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+
+            pdf_html = f"""
+            <div style='background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+                <div style='text-align: center; margin-bottom: 15px;'>
+                    <span style='color: #16a34a; font-weight: bold;'>PDF generado con éxito</span>
+                </div>
+                <div style='text-align: center; margin-bottom: 15px;'>
+                    <iframe src='data:application/pdf;base64,{pdf_base64}' 
+                    type='application/pdf'
+                    width='100%' 
+                    height='400px'
+                    style='border: 2px solid #e0e0e0; border-radius: 8px;'>
+                    </iframe>
+                </div>
+                <div style='text-align: center; margin-top: 15px;'>
+                    <a href='data:application/pdf;base64,{pdf_base64}' 
+                    download='{factura.data.get('numero_factura', 'documento').replace(" ", "_").replace("/", "-")[:30]}_{factura.data.get('cliente_nombre', 'cliente').replace(" ", "_").replace("/", "-")}{pdf_suffix}'
+                    style='                            
+                    background: #4CAF50;
+                    color: white;
+                    padding: 10px 20px;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    display: inline-block;
+                    font-size: 14px;
+                    font-weight: 1000;
+                       '>
+                    Descargar PDF
+                    </a>
+                </div>
+                
+            </div>
             """
             
-            return send_file(output_path, as_attachment=True, download_name=f"{factura.data.get('numero_factura', 'ticket')}.pdf")
+            return pdf_html, output_path, info, output_path
         else:
-            return render_template_string(HTML_TEMPLATE, error="❌ Error al procesar el XML")
-            
+            error_html = "<div class='preview-box'><p style='color: #dc2626; text-align: center;'>❌ Error al procesar el archivo XML</p></div>"
+            return error_html, None, "❌ El archivo XML no es válido o está corrupto", None
+
     except Exception as e:
-        return render_template_string(HTML_TEMPLATE, error=f"❌ Error: {str(e)}")
+        error_html = f"<div class='preview-box'><p style='color: #dc2626; text-align: center;'>❌ Error: {str(e)}</p></div>"
+        return error_html, None, f"❌ Error inesperado: {str(e)}", None
 
 
-if __name__ == '__main__':
+def clear_inputs():
+    xml_input_reset = gr.File(value=None)
+    format_dropdown_reset = gr.Radio(value="ticket")
+    pdf_viewer_reset = gr.HTML(
+        value="<div class='preview-box'><p style='color: #94a3b8; text-align: center;'>El PDF aparecerá aquí después de la conversión</p></div>"
+    )
+    info_output_reset = gr.Textbox(value="")
+    return (
+        xml_input_reset, 
+        format_dropdown_reset, 
+        pdf_viewer_reset, 
+        info_output_reset
+    )
+
+
+def create_gradio_interface():
+    with gr.Blocks(title="Conversor XML a PDF") as demo:
+        gr.Markdown("""
+        <div style='text-align: center; margin-bottom: 30px;'>
+            <h1 style='color: #2563eb; margin-bottom: 10px;'>Conversor XML a PDF: Ticket 80mm</h1>
+        </div>
+        """)
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                gr.Markdown("## 1. Subir Archivo y Seleccionar Formato")
+                xml_input = gr.File(
+                    label="Subir XML de Factura/Boleta", 
+                    file_types=[".xml"],
+                    elem_classes=["upload-box"]
+                )
+                
+                output_format_dropdown = gr.Radio(
+                    label="Formato de Salida",
+                    choices=[("Ticket 80mm", "ticket")],
+                    value="ticket",
+                    interactive=True
+                )
+                
+            with gr.Column(scale=2):
+                gr.Markdown("## 2. Ejecutar botones")
+
+                convert_btn = gr.Button(
+                    "Convertir a PDF", 
+                    variant="primary", 
+                    size="lg",
+                    elem_id="convert-btn"
+                )
+
+                clear_btn = gr.Button(
+                    "Limpiar", 
+                    variant="secondary", 
+                    size="lg",
+                    elem_id="clear-btn"
+                )
+
+                gr.Markdown("## 3. Descargar Archivo")
+                pdf_viewer = gr.HTML(
+                    label="",
+                    value="<div class='preview-box'><p style='color: #94a3b8; text-align: center;'>El PDF aparecerá aquí después de la conversión</p></div>"
+                )
+                                
+                gr.Markdown("Información del documento")
+                info_output = gr.Textbox(
+                    label="", 
+                    interactive=False,
+                    lines=6,
+                    elem_classes=["info-box"]
+                )
+
+                current_pdf = gr.State()
+                pdf_output = gr.File(label="PDF para descargar", visible=False)
+        
+        convert_btn.click(
+            fn=process_xml,
+            inputs=[
+                xml_input, 
+                output_format_dropdown, 
+                gr.State(""),           
+                gr.State(""),         
+                gr.State(""), 
+                gr.State(""),     
+                gr.State(""),
+                gr.State(""),   
+                gr.State("")
+            ],
+            outputs=[pdf_viewer, current_pdf, info_output, pdf_output]
+        )
+
+        clear_btn.click(
+            fn=clear_inputs,
+            inputs=[],
+            outputs=[
+                xml_input, 
+                output_format_dropdown, 
+                pdf_viewer, 
+                info_output
+            ]
+        )
+        
+        return demo
+
+
+if __name__ == "__main__":
     os.makedirs("images", exist_ok=True)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    if not os.path.exists("images/logo_manchester.png"):
+        print("Creando placeholder para logo_manchester.png")
+        
+    demo = create_gradio_interface()
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        root_path="/XML_A_PDF/"
+    )
