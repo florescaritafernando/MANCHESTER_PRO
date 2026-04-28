@@ -58,9 +58,12 @@ class YapesPDF:
                         except:
                             fecha = datetime.now().strftime('%d/%m/%Y')
                         
+                        # Convertir coma a punto para decimales
+                        monto_str = parts[1].strip().replace(',', '.')
+                        
                         self.data.append({
                             'nombre': parts[0].strip().upper(),
-                            'monto': float(parts[1].strip()),
+                            'monto': float(monto_str),
                             'fecha': fecha
                         })
             
