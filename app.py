@@ -588,7 +588,7 @@ class FacturaXMLtoPDF:
         qr_x = 0
         y_qr_start = label_height - 10 - qr_width
         
-        qr_path = "images/temp_qr.png"
+        qr_path = "images/qr_mostrario.png"
         if os.path.exists(qr_path):
             pdf.image(qr_path, x=qr_x, y=y_qr_start, w=qr_width)
         else:
@@ -641,23 +641,6 @@ class FacturaXMLtoPDF:
         pdf.output(self.output_path)
         logger.info(f"Etiqueta de envío generada: {self.output_path} (100mm x 150mm)")
         
-        pdf.set_font("Arial", '', 8)
-        pdf.cell(90, 5, "DIRECCIÓN DE ENVIO:", 0, 1, 'L')
-        pdf.set_font("Arial", 'B', 15)
-        pdf.ln(1)
-        
-        pdf.multi_cell(90, 6, c_dir.upper(), 'B', 'L')
-        
-        if direccion_completa:
-            pdf.ln(1)
-            pdf.set_font("Arial", '', 8)
-            pdf.cell(90, 5, "CIUDAD:", 0, 1, 'L')
-            pdf.set_font("Arial", 'B', 15)
-            pdf.ln(1)
-            pdf.multi_cell(90, 5, direccion_completa, 'B', 'L')
-        
-        pdf.ln(3)
-        
         agency_name = self.data.get('agency_name', '').upper()
         other_notes = self.data.get('other_notes', '').upper()
         
@@ -692,12 +675,12 @@ class FacturaXMLtoPDF:
                 pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
             pdf.ln(1)
         
-        y_qr_start = label_height - 10 - 20
+y_qr_start = label_height - 10 - 20
         qr_width = 20
         qr_x = 5
         y_qr_start = label_height - 10 - qr_width
         
-        qr_path = "images/temp_qr.png"
+        qr_path = "images/qr_mostrario.png"
         if os.path.exists(qr_path):
             pdf.image(qr_path, x=qr_x, y=y_qr_start, w=qr_width)
         else:
