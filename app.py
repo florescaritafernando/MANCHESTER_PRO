@@ -1729,10 +1729,6 @@ def health():
 def view_pdf(temp_id):
     """Servir PDF generado - regenera bajo demanda"""
     try:
-        # Verificar que el temp_id coincida con el actual
-        if temp_id != session.get('current_pdf'):
-            return "PDF no encontrado o expirado", 404
-        
         # Obtener datos necesarios de sesión
         xml_data = session.get('xml_file_data')
         if not xml_data:
