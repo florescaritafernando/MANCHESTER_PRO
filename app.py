@@ -49,10 +49,37 @@ class YapesPDF:
             
             for line in lines[1:]:
                 if line.strip():
-                    parts = line.strip().split(',')
+                    # Separar por coma, manejar comas dentro de valores con comillas
+                    import re
+                    parts = []
+                    in_quote = False
+                    current = ""
+                    for char in line.strip():
+                        if char == '"':
+                            in_quote = not in_quote
+                        elif char == ',' and not in_quote:
+                            parts.append(current)
+                            current = ""
+                        else:
+                            current += char
+                    parts.append(current)
+                    
                     # Limpiar comillas y espacios
                     parts = [p.strip().strip('"').strip("'") for p in parts]
+                    
                     if len(parts) >= 2 and parts[0] and parts[1]:
+                        # Parsear monto manteniendo decimales
+                        monto_str = parts[1].strip()
+                        # Reemplazar coma por punto
+                        monto_str = monto_str.replace(',', '.')
+                        
+                        try:
+                            monto = float(monto_str)
+                        except ValueError:
+                            logger.warning(f"Monto inválido: {parts[1]}, usando 0")
+                            monto = 0.0
+                        
+                        # Parsear fecha
                         fecha_raw = parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
                         try:
                             fecha_dt = datetime.strptime(fecha_raw, '%d/%m/%Y')
@@ -60,19 +87,11 @@ class YapesPDF:
                         except:
                             fecha = datetime.now().strftime('%d/%m/%Y')
                         
-                        # Convertir coma a punto para decimales
-                        monto_str = parts[1].replace(',', '.').strip()
-                        
-                        try:
-                            monto = float(monto_str)
-                            self.data.append({
-                                'nombre': parts[0].upper(),
-                                'monto': monto,
-                                'fecha': fecha
-                            })
-                        except ValueError:
-                            logger.warning(f"Monto inválido: {parts[1]}")
-                            continue
+                        self.data.append({
+                            'nombre': parts[0].upper(),
+                            'monto': monto,
+                            'fecha': fecha
+                        })
             
             return len(self.data) > 0
         except Exception as e:
@@ -109,7 +128,7 @@ class YapesPDF:
         for fecha in fechas:
             pdf.set_font("Arial", 'B', 10)
             pdf.cell(0, 5, f"Fecha: {fecha}", 0, 1, 'L')
-            pdf.ln(1)
+            pdf.ln(2)
             
             nombres = sorted(agrupado[fecha].keys())
             col_width = page_width / 2
@@ -119,18 +138,21 @@ class YapesPDF:
                 nombre = nombres[0]
                 montos = agrupado[fecha][nombre]
                 
-                pdf.set_font("Arial", 'B', 10)
+                pdf.set_font("Arial", 'B', 20)
                 pdf.cell(0, 4, f"{nombre}", 0, 1, 'L')
+                pdf.ln(4)
                 
-                pdf.set_font("Arial", '', 9)
+                pdf.set_font("Arial", '', 15)
                 for monto in montos:
                     pdf.cell(3, 5, "-", 0, 0, 'L')
                     pdf.cell(10, 5, "S/.", 0, 0, 'L')
                     pdf.cell(0, 5, f"{monto:.2f}", 0, 1, 'R')
-                
+                    pdf.ln(1)
+
                 # Total individual por nombre
+                pdf.ln(2)
                 total_nombre = sum(montos)
-                pdf.set_font("Arial", 'B', 10)
+                pdf.set_font("Arial", 'B', 20)
                 pdf.cell(0, 5, f"TOTAL: S/. {total_nombre:.2f}", 0, 1, 'R')
                 pdf.ln(3)
             else:
@@ -146,9 +168,9 @@ class YapesPDF:
                     
                     # Nombres
                     pdf.set_font("Arial", 'B', 10)
-                    pdf.cell(col_width, 4, f"{nombre1}", 0, 0, 'L')
+                    pdf.cell(col_width, 4, f"{nombre1}", 0, 0, 'C')
                     if nombre2:
-                        pdf.cell(col_width, 4, f"{nombre2}", 0, 1, 'L')
+                        pdf.cell(col_width, 4, f"{nombre2}", 0, 1, 'C')
                     else:
                         pdf.cell(col_width, 4, "", 0, 1, 'L')
                     
@@ -156,14 +178,14 @@ class YapesPDF:
                     y_start = pdf.get_y()
                     
                     # Montos columna 1 con padding
-                    pdf.set_font("Arial", '', 9)
+                    pdf.set_font("Arial", '', 15)
                     for monto in montos1:
                         pdf.cell(3, 5, "-", 0, 0, 'L')
                         pdf.cell(10, 5, "S/.", 0, 0, 'L')
-                        pdf.cell(col_width - 15, 5, f"{monto:.2f}", 0, 1, 'R')
+                        pdf.cell(col_width - 15, 5, f"{monto:.2f}", 0, 1, 'L')
                     
                     # Total individual columna 1
-                    pdf.set_font("Arial", 'B', 10)
+                    pdf.set_font("Arial", 'B', 20)
                     pdf.cell(col_width - 10, 5, "TOTAL:", 0, 0, 'L')
                     pdf.cell(10, 5, f"S/. {total1:.2f}", 0, 1, 'R')
                     
