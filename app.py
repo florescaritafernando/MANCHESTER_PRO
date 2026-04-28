@@ -1,6 +1,5 @@
 """
 🧾 APP DE CONVERSIÓN XML A PDF - TICKET 80mm
-Desarrollado para ManchesterTex E.I.R.L.
 """
 
 import xml.etree.ElementTree as ET
@@ -12,14 +11,16 @@ import base64
 from datetime import datetime
 import qrcode
 import logging
+import uuid
 from functools import wraps
-from flask import Flask, request, send_file, render_template_string, jsonify
+from flask import Flask, request, send_file, render_template_string, jsonify, session, redirect, url_for
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = 'manchester_pro_secret_key_2024'
 
 # Configuración de la app
 CONFIG = {
@@ -309,9 +310,9 @@ class FacturaXMLtoPDF:
             self.data['cliente_guia'] = self._get_text(root, './/cac:DespatchDocumentReference/cbc:ID', namespaces)
             
             # Totales
-            self.data['total_venta'] = self._get_text(root, './/cac:TaxSubtotal/cbc:TaxableAmount', namespaces, '0.0')
-            self.data['total_igv'] = self._get_text(root, './/cac:TaxTotal/cbc:TaxAmount', namespaces, '0.0')
-            self.data['total_pagar'] = self._get_text(root, './/cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces, '0.0')
+            self.data['total_venta'] = float(self._get_text(root, './/cac:TaxSubtotal/cbc:TaxableAmount', namespaces, '0.0'))
+            self.data['total_igv'] = float(self._get_text(root, './/cac:TaxTotal/cbc:TaxAmount', namespaces, '0.0'))
+            self.data['total_pagar'] = float(self._get_text(root, './/cac:LegalMonetaryTotal/cbc:PayableAmount', namespaces, '0.0'))
             
             # Items
             self.data['items'] = []
@@ -320,9 +321,9 @@ class FacturaXMLtoPDF:
                     'id': self._get_text(item, './/cac:SellersItemIdentification/cbc:ID', namespaces),
                     'unidad': self._get_text(item, './/cbc:Note', namespaces),
                     'descripcion': self._get_text(item, './/cbc:Description', namespaces),
-                    'cantidad': self._get_text(item, './/cbc:InvoicedQuantity', namespaces, '0'),
-                    'precio_unitario': self._get_text(item, './/cac:Price/cbc:PriceAmount', namespaces, '0.00'),
-                    'total': self._get_text(item, './/cbc:LineExtensionAmount', namespaces, '0.00')
+                    'cantidad': float(self._get_text(item, './/cbc:InvoicedQuantity', namespaces, '0')),
+                    'precio_unitario': float(self._get_text(item, './/cac:Price/cbc:PriceAmount', namespaces, '0.00')),
+                    'total': float(self._get_text(item, './/cbc:LineExtensionAmount', namespaces, '0.00'))
                 }
                 self.data['items'].append(item_data)
             
@@ -440,6 +441,35 @@ class FacturaXMLtoPDF:
             self._generate_ticket_pdf()
         else:
             raise ValueError(f"Formato no válido: {output_format}")
+
+    def _generate_qr(self, pdf):
+        """Generar código QR"""
+        ruc = self.data.get('emisor_ruc', '')
+        tipo = self.data.get('tipo_codigo_invoice', '01')
+        serie, correlativo = self.data.get('numero_factura', '001-000001').split('-')[:2]
+        
+        val_igv = safe_div(float(self.data.get('total_igv', '0')), 1)
+        val_total = safe_div(float(self.data.get('total_pagar', '0')), 1)
+        
+        fecha = self.data.get('fecha_emision', '')
+        tipo_doc_cli = self.data.get('tipo_doc_cli', '')
+        ruc_cli = self.data.get('cliente_ID', '')
+        digest = self.data.get('digest_value', '')
+        
+        cadena_qr = f"{ruc}|{tipo}|{serie}|{correlativo}|{val_igv:.2f}|{val_total:.2f}|{fecha}|{tipo_doc_cli}|{ruc_cli}|{digest}|"
+        
+        try:
+            qr_img = qrcode.make(cadena_qr)
+            qr_path = "images/temp_qr.png"
+            qr_img.save(qr_path)
+            
+            if ruc and os.path.exists(qr_path):
+                img_w = 30
+                img_x = safe_div(self.page_width - img_w, 2)
+                pdf.image(qr_path, x=img_x, y=pdf.get_y(), w=img_w)
+                pdf.set_y(pdf.get_y() + safe_div(img_w, 3) + 20)
+        except Exception as e:
+            logger.warning(f"Error generando QR: {e}")        
     
     def _generate_ticket_pdf(self):
         """Generar ticket 80mm"""
@@ -577,7 +607,6 @@ class FacturaXMLtoPDF:
         
         # Tabla de items
         anchuras = [8, 14, 10, 22, 10, 16]
-        original_color = pdf.draw_color
         pdf.set_draw_color(255, 255, 255)
         pdf.set_font("Arial", '', 7)
         
@@ -586,7 +615,7 @@ class FacturaXMLtoPDF:
         for i, h in enumerate(headers):
             pdf.cell(anchuras[i], 1, h, 1, 0, 'C')
         
-        pdf.set_draw_color(original_color)
+        pdf.set_draw_color(0, 0, 0)
 
         pdf.ln(2)
         pdf.cell(0, 2, "", "T", 1)
@@ -645,34 +674,7 @@ class FacturaXMLtoPDF:
         pdf.output(self.output_path)
         logger.info(f"PDF generado: {self.output_path}")
     
-    def _generate_qr(self, pdf):
-        """Generar código QR"""
-        ruc = self.data.get('emisor_ruc', '')
-        tipo = self.data.get('tipo_codigo_invoice', '01')
-        serie, correlativo = self.data.get('numero_factura', '001-000001').split('-')[:2]
-        
-        val_igv = safe_div(float(self.data.get('total_igv', '0')), 1)
-        val_total = safe_div(float(self.data.get('total_pagar', '0')), 1)
-        
-        fecha = self.data.get('fecha_emision', '')
-        tipo_doc_cli = self.data.get('tipo_doc_cli', '')
-        ruc_cli = self.data.get('cliente_ID', '')
-        digest = self.data.get('digest_value', '')
-        
-        cadena_qr = f"{ruc}|{tipo}|{serie}|{correlativo}|{val_igv:.2f}|{val_total:.2f}|{fecha}|{tipo_doc_cli}|{ruc_cli}|{digest}|"
-        
-        try:
-            qr_img = qrcode.make(cadena_qr)
-            qr_path = "images/temp_qr.png"
-            qr_img.save(qr_path)
-            
-            if ruc and os.path.exists(qr_path):
-                img_w = 30
-                img_x = safe_div(self.page_width - img_w, 2)
-                pdf.image(qr_path, x=img_x, y=pdf.get_y(), w=img_w)
-                pdf.set_y(pdf.get_y() + safe_div(img_w, 3) + 20)
-        except Exception as e:
-            logger.warning(f"Error generando QR: {e}")
+
 
 
 # ========== FLASK ROUTES ==========
@@ -684,7 +686,14 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversor XML a PDF - ManchesterTex</title>
-    <script src="https://unpkg.com/pdf-generator-api-pdfviewer@latest/dist/PDFViewer.iife.js"></script>
+    <script>
+    function downloadPDF(base64Data, filename) {
+        var link = document.createElement('a');
+        link.href = 'data:application/pdf;base64,' + base64Data;
+        link.download = filename;
+        link.click();
+    }
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -962,21 +971,33 @@ HTML_TEMPLATE = """
                     </div>
                     
                     <button type="submit" class="btn btn-convert" id="convertirBtn" disabled>🔄 Convertir a PDF</button>
-                {% if pdf_base64 %}
+                {% if pdf_url %}
                 <div class="viewer-header">
-                    <a href="data:application/pdf;base64,{{pdf_base64}}" download="{{pdf_name}}" class="btn btn-download">📥 Descargar PDF</a>
-                    <a href="/" class="btn btn-clean">🗑️ Limpiar</a>
+                    <a href="/download" class="btn btn-download">📥 Descargar PDF</a>
+                    <a href="/clear" class="btn btn-clean">🗑️ Limpiar</a>
                 </div>
                 {% endif %}
             </div>
             
             <div class="left-panel">
-                {% if pdf_base64 %}
-                <div id="pdf-viewer"></div>
+                {% if pdf_url %}
+                <iframe id="pdf-viewer" src="{{pdf_url}}" style="width:100%;height:600px;border:none;border-radius:8px;"></iframe>
                 {% else %}
                 <div class="empty-state">
                     <h2>📄 Esperando documento</h2>
                     <p>Sube un archivo XML para previsualizar el PDF</p>
+                </div>
+                {% endif %}
+                
+                {% if info %}
+                <div class="info">
+                    <h3>📄 Información del Documento</h3>
+                    <p><strong>Tipo:</strong> {{ info.tipo }}</p>
+                    <p><strong>Número:</strong> {{ info.numero }}</p>
+                    <p><strong>Emisor:</strong> {{ info.emisor }}</p>
+                    <p><strong>Cliente:</strong> {{ info.cliente }}</p>
+                    <p><strong>Total:</strong> {{ info.total }}</p>
+                    <p><strong>Fecha:</strong> {{ info.fecha }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -1011,27 +1032,6 @@ HTML_TEMPLATE = """
         }
     }
     </script>
-    
-    {% if pdf_base64 %}
-    <script>
-    var viewer = new PDFGeneratorApi.PDFViewer({
-        container: document.getElementById('pdf-viewer'),
-        options: {
-            initialScale: PDFGeneratorApi.Scale.AutomaticZoom,
-            print: true,
-            download: false,
-            search: true,
-            scaleDropdown: true,
-            sidebar: false,
-            toolbarFontSize: 14,
-            toolbarIconSize: 20
-        }
-    });
-    
-    var b64 = "{{pdf_base64}}";
-    viewer.loadBase64(b64);
-    </script>
-    {% endif %}
 </body>
 </html>
 """
@@ -1041,7 +1041,20 @@ HTML_TEMPLATE = """
 @log_request
 def index():
     """Página principal"""
-    return render_template_string(HTML_TEMPLATE)
+    # Verificar si hay un PDF en sesión
+    temp_id = session.get('current_pdf')
+    pdf_url = None
+    info = None
+    pdf_name = None
+    
+    if temp_id:
+        pdf_path = session.get(f'pdf_{temp_id}')
+        if pdf_path and os.path.exists(pdf_path):
+            pdf_url = url_for('view_pdf', temp_id=temp_id)
+            info = session.get('pdf_info')
+            pdf_name = session.get('pdf_name')
+    
+    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name)
 
 
 @app.route('/convertir', methods=['POST'])
@@ -1107,15 +1120,14 @@ def convertir():
             if not factura.parse_xml():
                 error_msg = factura.errors[0] if factura.errors else "Error al procesar el XML"
                 return render_template_string(HTML_TEMPLATE, error=f"❌ {error_msg}")
-            
-            factura.generate_pdf(formato)
-            
+                        
+            factura.generate_pdf()
+
             # Nombre del archivo PDF: NUMERO_NOMBRE_CLIENTE_TIPO_FORMATO.pdf
             numero = factura.data.get('numero_factura', 'documento')
             cliente_nombre = factura.data.get('cliente_nombre', 'cliente').replace(' ', '_')
             cliente_nombre = ''.join(c for c in cliente_nombre if c.isalnum() or c == '_')
-            tipo_doc = factura.data.get('tipo_documento', 'COMPROBANTE').replace(' ', '')
-            pdf_name = f"{numero}_{cliente_nombre}_{tipo_doc}_{formato}.pdf"
+            pdf_name = f"{numero}_{cliente_nombre}_{formato}.pdf"
             
             info = {
                 'tipo': factura.data.get('tipo_documento', 'N/A'),
@@ -1128,13 +1140,15 @@ def convertir():
         else:
             return render_template_string(HTML_TEMPLATE, error="❌ Formato no soportado. Use XML o CSV")
         
-        # Leer PDF y convertir a base64
-        with open(output_path, 'rb') as f:
-            pdf_data = f.read()
-            pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+        # Guardar PDF en archivo temporal y registrar en sesión
+        temp_id = str(uuid.uuid4())
+        session[f'pdf_{temp_id}'] = output_path
+        session['current_pdf'] = temp_id
+        session['pdf_name'] = pdf_name
+        session['pdf_info'] = info
         
         # Retornar con vista previa
-        return render_template_string(HTML_TEMPLATE, pdf_base64=pdf_base64, info=info, pdf_name=pdf_name)
+        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name)
         
     except Exception as e:
         logger.exception("Error en conversión")
@@ -1145,6 +1159,63 @@ def convertir():
 def health():
     """Health check"""
     return jsonify({'status': 'ok', 'service': 'XML to PDF Converter'})
+
+
+@app.route('/pdf/<temp_id>')
+def view_pdf(temp_id):
+    """Servir PDF generado"""
+    try:
+        pdf_path = session.get(f'pdf_{temp_id}')
+        if not pdf_path or not os.path.exists(pdf_path):
+            return "PDF no encontrado", 404
+        
+        return send_file(pdf_path, mimetype='application/pdf', as_attachment=False)
+    except Exception as e:
+        logger.exception("Error sirviendo PDF")
+        return str(e), 500
+
+
+@app.route('/download')
+def download_pdf():
+    """Descargar PDF"""
+    try:
+        temp_id = session.get('current_pdf')
+        pdf_path = session.get(f'pdf_{temp_id}')
+        pdf_name = session.get('pdf_name', 'documento.pdf')
+        
+        if not pdf_path or not os.path.exists(pdf_path):
+            return "PDF no encontrado", 404
+        
+        return send_file(pdf_path, mimetype='application/pdf', as_attachment=True, download_name=pdf_name)
+    except Exception as e:
+        logger.exception("Error descargando PDF")
+        return str(e), 500
+
+
+@app.route('/clear')
+def clear_session():
+    """Limpiar sesión y archivos temporales"""
+    try:
+        # Limpiar archivos temporales
+        temp_id = session.get('current_pdf')
+        if temp_id:
+            pdf_path = session.get(f'pdf_{temp_id}')
+            if pdf_path and os.path.exists(pdf_path):
+                try:
+                    os.unlink(pdf_path)
+                except:
+                    pass
+            # Limpiar claves de sesión
+            session.pop(f'pdf_{temp_id}', None)
+        
+        session.pop('current_pdf', None)
+        session.pop('pdf_name', None)
+        session.pop('pdf_info', None)
+        
+        return redirect(url_for('index'))
+    except Exception as e:
+        logger.exception("Error limpiando sesión")
+        return redirect(url_for('index'))
 
 
 # ========== MAIN ==========
