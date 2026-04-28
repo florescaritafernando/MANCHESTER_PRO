@@ -1,5 +1,5 @@
 """
-🧾 APP DE CONVERSIÓN XML A PDF - TICKET 80mm
+APP DE CONVERSIÓN XML A PDF - TICKET 80mm
 """
 
 import xml.etree.ElementTree as ET
@@ -451,78 +451,97 @@ class FacturaXMLtoPDF:
         
         pdf = FPDF(orientation='P', unit='mm', format=(label_width, label_height))
         pdf.set_margins(0, 0, 0)
+
         pdf.add_page()
         pdf.set_auto_page_break(auto=False)
+
         
         emisor_nombre = self.data.get('emisor_nombre', 'N/A').upper()
         emisor_ruc = self.data.get('emisor_ruc', 'N/A')
         
         logo_path = "images/logo_manchester.png"
-        logo_width = 35
+        logo_width = 30
         pdf.set_y(0)
         if os.path.exists(logo_path):
-            pdf.image(logo_path, x=0, y=0, w=logo_width)
+            pdf.image(logo_path, x=8, y=2, w=logo_width)
             pdf.set_y(20)
         else:
             pdf.set_font("Arial", 'B', 14)
-            pdf.set_xy(0, 0)
+            pdf.set_xy(1, 1)
             pdf.cell(35, 7, "MANCHESTER", 0, 0, 'L')
             pdf.set_y(12)
         
-        remitente_x = label_width - 45
+        # REMITENTE pegado al borde derecho
+        remitente_x = label_width - 50.2
         pdf.set_y(0)
         pdf.set_draw_color(0, 0, 0)
         pdf.set_line_width(0.3)
         
         pdf.set_font("Arial", 'B', 9)
         pdf.set_xy(remitente_x, 0)
-        pdf.cell(45, 5, "REMITENTE", 'TLR', 1, 'C')
+        pdf.cell(50, 5, "REMITENTE", 'TLR', 1, 'C')
         
-        pdf.set_font("Arial", '', 7)
+        pdf.set_font("Arial", '', 9)
         pdf.set_xy(remitente_x, pdf.get_y())
         pdf.set_char_spacing(0.5)
-        pdf.cell(45, 4, f"RUC: {emisor_ruc}", 'LR', 1, 'C')
+        pdf.cell(50, 4, f"RUC: {emisor_ruc}", 'LR', 1, 'C')
         pdf.set_char_spacing(0.0)
         
-        pdf.set_font("Arial", 'B', 8)
+        pdf.set_font("Arial", 'B', 9)
         pdf.set_xy(remitente_x, pdf.get_y())
         
         if pdf.get_string_width(emisor_nombre) > 40:
-            pdf.set_font("Arial", 'B', 7)
-            pdf.multi_cell(45, 4, emisor_nombre, 'BLR', 'C')
+            pdf.set_font("Arial", 'B', 8)
+            pdf.multi_cell(50, 4, emisor_nombre, 'BLR', 'C')
         else:
-            pdf.cell(45, 4, emisor_nombre, 'BLR', 1, 'C')
+            pdf.cell(50, 4, emisor_nombre, 'BLR', 1, 'C')
         
-        pdf.line(0, pdf.get_y() + 1, label_width, pdf.get_y() + 1)
-        pdf.set_y(pdf.get_y() + 3)
+        # Línea divisoria pegada al borde
+        pdf.line(0, pdf.get_y(), label_width, pdf.get_y())
         
-        cliente_id = self.data.get('cliente_ID', '')
-        cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
+        contenido_destinatario = label_width - 5
+
+        # DATOS DESTINATARIO pegados al borde izquierdo
+        # Si "recoje otra persona" está activo, usar esos datos
+        recoje_otra_persona = self.data.get('recoje_otra_persona', False)
         
-        pdf.set_font("Arial", 'B', 10)
+        if recoje_otra_persona:
+            cliente_id = self.data.get('recoje_dni', '')
+            cliente_nombre = self.data.get('recoje_nombre', 'N/A').upper()
+            cliente_dir = self.data.get('recoje_direccion', '')
+            cliente_dis = ''
+            cliente_pro = ''
+            cliente_dep = ''
+        else:
+            cliente_id = self.data.get('cliente_ID', '')
+            cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
+            cliente_dir = self.data.get('cliente_direccion', '')
+            cliente_dis = self.data.get('cliente_distrito', '')
+            cliente_pro = self.data.get('cliente_provincia', '')
+            cliente_dep = self.data.get('cliente_departamento', '')
+
+        pdf.set_margins(2, 0, 2)
+
+        pdf.ln(1)
+        pdf.set_font("Arial", 'B', 12)
         pdf.cell(0, 5, "DATOS DESTINATARIO", 0, 1, 'C')
+
+        pdf.set_font("Arial", 'B', 26)
         
-        pdf.set_font("Arial", 'B', 20)
-        
-        if pdf.get_string_width(cliente_nombre) > 200:
-            pdf.set_font("Arial", 'B', 15)
-            pdf.multi_cell(90, 8, cliente_nombre, 0, 'L')
+        if pdf.get_string_width(cliente_nombre) > 190:
+            pdf.set_font("Arial", 'B', 18)
+            pdf.multi_cell(contenido_destinatario, 10, cliente_nombre, 0, 'L')
         else:
-            pdf.multi_cell(90, 8, cliente_nombre, 0, 'L')
+            pdf.multi_cell(contenido_destinatario, 10, cliente_nombre, 0, 'L')
         
         pdf.ln(2)
         
-        pdf.set_font("Arial", '', 15)
+        pdf.set_font("Arial", '', 18)
         pdf.set_char_spacing(0.5)
         id_label = "RUC" if len(cliente_id) == 11 else ("DNI" if len(cliente_id) == 8 else "CE")
-        pdf.cell(90, 5, f"{id_label}: {cliente_id}", 0, 1, 'L')
+        pdf.cell(contenido_destinatario, 5, f"{id_label}: {cliente_id}", 0, 1, 'L')
         pdf.set_char_spacing(0.0)
         pdf.ln(1)
-        
-        cliente_dir = self.data.get('cliente_direccion', '')
-        cliente_dis = self.data.get('cliente_distrito', '')
-        cliente_pro = self.data.get('cliente_provincia', '')
-        cliente_dep = self.data.get('cliente_departamento', '')
         
         invalidos = ['N/A', 'n/a', '-', '--', '---', '', None]
         
@@ -531,21 +550,26 @@ class FacturaXMLtoPDF:
         direccion_partes = [cliente_dep, cliente_pro, cliente_dis]
         direccion_ciudad = [p.strip() for p in direccion_partes if p and p.strip() not in invalidos]
         direccion_completa = " - ".join(direccion_ciudad).upper()
-        
+
+        tiene_ciudad = any(p and p.strip() not in invalidos for p in direccion_partes)
+
         pdf.set_font("Arial", '', 8)
-        pdf.cell(90, 5, "DIRECCIÓN DE ENVIO:", 0, 1, 'L')
-        pdf.set_font("Arial", 'B', 15)
+        pdf.cell(contenido_destinatario, 5, "DIRECCIÓN DE ENVIO:", 0, 1, 'L')
+        pdf.set_font("Arial", 'B', 18)
         pdf.ln(1)
         
-        pdf.multi_cell(90, 6, c_dir.upper(), 'B', 'L')
+        pdf.multi_cell(contenido_destinatario, 8, c_dir.upper(), 'B', 'L')
         
-        if direccion_completa:
+        if tiene_ciudad:
             pdf.ln(1)
             pdf.set_font("Arial", '', 8)
-            pdf.cell(90, 5, "CIUDAD:", 0, 1, 'L')
+            pdf.cell(contenido_destinatario, 5, "CIUDAD:", 0, 1, 'L')
             pdf.set_font("Arial", 'B', 15)
             pdf.ln(1)
-            pdf.multi_cell(90, 5, direccion_completa, 'B', 'L')
+            pdf.multi_cell(contenido_destinatario, 8, direccion_completa, 'B', 'L')
+        
+        pdf.line(0, pdf.get_y(), label_width, pdf.get_y())
+
         
         pdf.ln(3)
         
@@ -553,53 +577,52 @@ class FacturaXMLtoPDF:
         other_notes = self.data.get('other_notes', '').upper()
         
         if agency_name:
-            ancho_label = 20
-            ancho_valor = 70
+            ancho_label = 22
+            ancho_valor = label_width - ancho_label
             
-            pdf.set_font("Arial", 'B', 10)
-            pdf.cell(ancho_label, 4, "AGENCIA:", 0, 0, 'L')
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(ancho_label, 6, "AGENCIA:", 0, 0, 'L')
             
-            if pdf.get_string_width(agency_name) > 100:
-                pdf.set_font("Arial", 'B', 8)
-                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
+            if pdf.get_string_width(agency_name) > ancho_valor:
+                pdf.set_font("Arial", 'B', 12)
+                pdf.multi_cell(ancho_valor, 6, agency_name, 0, 'L')
             else:
-                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
+                pdf.multi_cell(ancho_valor, 6, agency_name, 0, 'L')
             pdf.ln(1)
         
-        pdf.ln(2)
         if other_notes:
-            ancho_label = 15
-            ancho_valor = 75
+            ancho_label = 18
+            ancho_valor = 72
             
-            pdf.set_font("Arial", 'B', 10)
-            pdf.cell(ancho_label, 4, "OTROS:", 0, 0, 'L')
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(ancho_label, 6, "OTROS:", 0, 0, 'L')
             
-            pdf.set_font("Arial", '', 10)
+            pdf.set_font("Arial", '', 12)
             
             if pdf.get_string_width(other_notes) > 100:
-                pdf.set_font("Arial", '', 8)
-                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
+                pdf.set_font("Arial", '', 12)
+                pdf.multi_cell(ancho_valor, 6, other_notes, 0, 'L')
             else:
-                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
+                pdf.multi_cell(ancho_valor, 6, other_notes, 0, 'L')
             pdf.ln(1)
         
-        y_qr_start = label_height - 10 - 20
+        # QR en extremo inferior izquierdo
         qr_width = 20
-        qr_x = 0
-        y_qr_start = label_height - 10 - qr_width
+        qr_x = 1
+        qr_y = label_height - qr_width - 5
         
         qr_path = "images/qr_mostrario.png"
         if os.path.exists(qr_path):
-            pdf.image(qr_path, x=qr_x, y=y_qr_start, w=qr_width)
+            pdf.image(qr_path, x=qr_x, y=qr_y, w=qr_width)
         else:
             pdf.set_fill_color(200, 200, 200)
-            pdf.rect(qr_x, y_qr_start, qr_width, qr_width, 'F')
+            pdf.rect(qr_x, qr_y, qr_width, qr_width, 'F')
             pdf.set_font("Arial", '', 8)
-            pdf.set_xy(qr_x, y_qr_start + 12)
+            pdf.set_xy(qr_x, qr_y + 12)
             pdf.cell(qr_width, 5, "QR", 0, 0, 'C')
         
-        pdf.set_font("Arial", '', 6)
-        pdf.set_xy(qr_x, y_qr_start + qr_width + 1)
+        pdf.set_font("Arial", 'B', 6)
+        pdf.set_xy(qr_x, qr_y + qr_width)
         pdf.cell(qr_width, 4, "CATÁLOGO", 0, 0, 'C')
         
         num_documento = self.data.get('numero_factura', 'N/A')
@@ -615,119 +638,26 @@ class FacturaXMLtoPDF:
             except ValueError:
                 pass
         
-        info_x = qr_x + qr_width + 5
-        info_width = label_width - info_x
+        # Info inmediatamente después del QR (misma altura Y)
+        info_x = qr_x + qr_width + 1
+        info_width = label_width - info_x - 1
         
-        pdf.set_xy(info_x, y_qr_start)
+        pdf.set_xy(info_x, qr_y +0.5)
         pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.2)
+        pdf.set_line_width(0.3)
         pdf.set_fill_color(255, 255, 255)
         
         pdf.set_font("Arial", 'B', 9)
         pdf.set_char_spacing(1)
-        pdf.cell(info_width, 5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
+        pdf.cell(info_width, 7.5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
         
         pdf.set_x(info_x)
         pdf.set_font("Arial", 'B', 9)
-        pdf.cell(info_width, 5, f"FECHA: {fecha_formateada}", 1, 1, 'C', True)
-        
-        if guia_remision != 'N/A' and guia_remision.strip():
-            pdf.set_x(info_x)
-            pdf.set_font("Arial", 'B', 9)
-            pdf.cell(info_width, 5, f"GUÍA: N° {guia_remision}", 1, 1, 'C', True)
-        
-        pdf.set_char_spacing(0)
-        
-        pdf.output(self.output_path)
-        logger.info(f"Etiqueta de envío generada: {self.output_path} (100mm x 150mm)")
-        
-        agency_name = self.data.get('agency_name', '').upper()
-        other_notes = self.data.get('other_notes', '').upper()
-        
-        if agency_name:
-            ancho_label = 20
-            ancho_valor = 70
-            
-            pdf.set_font("Arial", 'B', 10)
-            pdf.cell(ancho_label, 4, "AGENCIA:", 0, 0, 'L')
-            
-            if pdf.get_string_width(agency_name) > 100:
-                pdf.set_font("Arial", 'B', 8)
-                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
-            else:
-                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
-            pdf.ln(1)
-        
-        pdf.ln(2)
-        if other_notes:
-            ancho_label = 15
-            ancho_valor = 75
-            
-            pdf.set_font("Arial", 'B', 10)
-            pdf.cell(ancho_label, 4, "OTROS:", 0, 0, 'L')
-            
-            pdf.set_font("Arial", '', 10)
-            
-            if pdf.get_string_width(other_notes) > 100:
-                pdf.set_font("Arial", '', 8)
-                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
-            else:
-                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
-            pdf.ln(1)
-        
-y_qr_start = label_height - 10 - 20
-        qr_width = 20
-        qr_x = 5
-        y_qr_start = label_height - 10 - qr_width
-        
-        qr_path = "images/qr_mostrario.png"
-        if os.path.exists(qr_path):
-            pdf.image(qr_path, x=qr_x, y=y_qr_start, w=qr_width)
-        else:
-            pdf.set_fill_color(200, 200, 200)
-            pdf.rect(qr_x, y_qr_start, qr_width, qr_width, 'F')
-            pdf.set_font("Arial", '', 8)
-            pdf.set_xy(qr_x, y_qr_start + 12)
-            pdf.cell(qr_width, 5, "QR", 0, 0, 'C')
-        
-        pdf.set_font("Arial", '', 6)
-        pdf.set_xy(qr_x, y_qr_start + qr_width + 1)
-        pdf.cell(qr_width, 4, "CATÁLOGO", 0, 0, 'C')
-        
-        num_documento = self.data.get('numero_factura', 'N/A')
-        fecha = self.data.get('fecha_emision', 'N/A')
-        guia_remision = self.data.get('cliente_guia', 'N/A')
-        
-        fecha_formateada = fecha
-        
-        if fecha != 'N/A':
-            try:
-                objeto_fecha = datetime.strptime(fecha, '%Y-%m-%d')
-                fecha_formateada = objeto_fecha.strftime('%d/%m/%Y')
-            except ValueError:
-                pass
-        
-        info_x = qr_x + qr_width + 5
-        info_width = label_width - 5 - info_x
-        
-        pdf.set_xy(info_x, y_qr_start)
-        pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.2)
-        pdf.set_fill_color(255, 255, 255)
-        
-        pdf.set_font("Arial", 'B', 9)
-        pdf.set_char_spacing(1)
-        pdf.cell(info_width, 5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
+        pdf.cell(info_width, 7.5, f"GUÍA DE REMISIÓN: N° {guia_remision}", 1, 1, 'C', True)
         
         pdf.set_x(info_x)
         pdf.set_font("Arial", 'B', 9)
-        pdf.cell(info_width, 5, f"FECHA: {fecha_formateada}", 1, 1, 'C', True)
-        
-        if guia_remision != 'N/A' and guia_remision.strip():
-            pdf.set_x(info_x)
-            pdf.set_font("Arial", 'B', 9)
-            pdf.cell(info_width, 5, f"GUÍA: N° {guia_remision}", 1, 1, 'C', True)
-        
+        pdf.cell(info_width, 7.5, f"FECHA DE EMISIÓN: {fecha_formateada}", 1, 1, 'C', True)
         pdf.set_char_spacing(0)
         
         pdf.output(self.output_path)
@@ -751,7 +681,7 @@ y_qr_start = label_height - 10 - 20
         
         try:
             qr_img = qrcode.make(cadena_qr)
-            qr_path = "images/qr_mostrario.png"
+            qr_path = "images/temp_qr.png"
             qr_img.save(qr_path)
             
             if ruc and os.path.exists(qr_path):
@@ -793,7 +723,10 @@ y_qr_start = label_height - 10 - 20
         else:
             pdf.cell(0, 4, emisor_nombre, 0, 1, 'C')
         
+        pdf.set_font("Arial", '', 10)
+        pdf.set_char_spacing(0.5)
         pdf.cell(0, 4, f"RUC: {self.data.get('emisor_ruc', 'N/A')}", 0, 1, 'C')
+        pdf.set_char_spacing(0.0)
         
         # Dirección emisor
         emisor_dir = self.data.get('emisor_direccion', '')
@@ -818,7 +751,9 @@ y_qr_start = label_height - 10 - 20
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 4, f"{self.data.get('tipo_documento', 'COMPROBANTE')} ELECTRÓNICA", 0, 1, 'C')
         pdf.set_font("Arial", 'B', 14)
+        pdf.set_char_spacing(1)
         pdf.cell(0, 5, self.data.get('numero_factura', 'N/A'), 0, 1, 'C')
+        pdf.set_char_spacing(0)
         
         pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
@@ -837,9 +772,9 @@ y_qr_start = label_height - 10 - 20
         cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
         label = "RAZÓN SOCIAL:" if len(cliente_id) == 11 else "CLIENTE:"
         if len(cliente_nombre) > 25:
-            pdf.multi_cell(0, 4, f"{label} {cliente_nombre}", 0)
+            pdf.multi_cell(0, 4, f"{label} {cliente_nombre}", 0, 'L')
         else:
-            pdf.cell(0, 4, f"{label} {cliente_nombre}", 0, 1)
+            pdf.cell(0, 4, f"{label} {cliente_nombre}", 0, 1, 'L')
         
         pdf.ln(1)
         
@@ -851,7 +786,7 @@ y_qr_start = label_height - 10 - 20
         
         pdf.set_font("Arial", '', 10)
         if len(c_dir) > 24:
-            pdf.multi_cell(0, 4, f"DIRECCIÓN: {c_dir.upper()}", 0)
+            pdf.multi_cell(0, 4, f"DIRECCIÓN: {c_dir.upper()}", 0, 'L')
         else:
             pdf.cell(0, 4, f"DIRECCIÓN: {c_dir.upper()}", 0, 1, 'L')
         
@@ -919,17 +854,32 @@ y_qr_start = label_height - 10 - 20
         pdf.set_font("Arial", '', 8)
         for item in self.data.get('items', []):
             x_start = pdf.get_x()
+            y_start = pdf.get_y()
+
             pdf.cell(anchuras[0], 3, str(item.get('id', ''))[:20], 1, 0, 'C')
-            pdf.cell(anchuras[1], 3, str(item.get('cantidad', '0'))[:6], 1, 0, 'C')
+            pdf.set_font("Arial", '', 10)
+
+            pdf.set_char_spacing(1)
+            cantidad = float(item.get('cantidad', '0'))
+
+            pdf.cell(anchuras[1], 3, f"{cantidad:.2f}"[:6], 1, 0, 'C')
+            pdf.set_char_spacing(0.0)
+            pdf.set_font("Arial", '', 8)
+
             pdf.cell(anchuras[2], 3, str(item.get('unidad', 'MTS'))[:4], 1, 0, 'C')
-            x_desc = pdf.get_x()
+            x_descripcion = pdf.get_x()
+
             pdf.multi_cell(anchuras[3], 3, str(item.get('descripcion', '')), 0, 'C')
-            y_desc = pdf.get_y()
-            pdf.set_y(y_desc - 3)
-            pdf.set_x(x_desc + anchuras[3])
-            pdf.cell(anchuras[4], 3, str(item.get('precio_unitario', ''))[:5], 1, 0, 'C')
-            pdf.cell(anchuras[5], 3, str(item.get('total', '')), 1, 1, 'C')
-            pdf.set_x(x_start)
+            y_final = pdf.get_y()
+            
+            altura_fila = y_final - y_start
+
+            pdf.set_y(y_start)
+            
+            pdf.set_x(x_descripcion + anchuras[3]) 
+            pdf.cell(anchuras[4], altura_fila, str(item.get('precio_unitario', ''))[:5], 1, 0, 'C')
+            pdf.cell(anchuras[5], altura_fila, str(item.get('total', '')), 1, 1, 'C')
+            pdf.set_xy(x_start, pdf.get_y())
             pdf.ln(2)
         
         pdf.ln(2)
@@ -976,7 +926,9 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversor XML a PDF - ManchesterTex</title>
+    <title>Conversor XML a PDF</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
     function downloadPDF(base64Data, filename) {
         var link = document.createElement('a');
@@ -1130,16 +1082,20 @@ HTML_TEMPLATE = """
             display: none;
         }
         .file-label {
-            display: block;
-            padding: 15px;
-            border: 2px dashed #cbd5e1;
-            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            border: 3px dashed #cbd5e1;
+            border-radius: 15px;
             background: #f8fafc;
             cursor: pointer;
             transition: all 0.3s;
             text-align: center;
             color: #64748b;
-            font-size: 0.9rem;
+            font-size: 1.3rem;
+            font-weight: bold;
+            min-height: 150px;
         }
         .file-label:hover {
             border-color: #667eea;
@@ -1149,6 +1105,10 @@ HTML_TEMPLATE = """
             border-color: #22c55e;
             background: #f0fdf4;
             color: #166534;
+            padding: 15px;
+            min-height: auto;
+            font-size: 1rem;
+            justify-content: space-between;
         }
         .file-container {
             display: flex;
@@ -1187,6 +1147,36 @@ HTML_TEMPLATE = """
             background: white;
             font-size: 1rem;
         }
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            background: white;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+        }
+        textarea:focus, select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 12px 15px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            background: white;
+            font-size: 1rem;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
         .btn { 
             width: 100%; 
             padding: 15px; 
@@ -1214,7 +1204,8 @@ HTML_TEMPLATE = """
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         }
         .btn-clean { 
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+            text-decoration: none;
         }
         .btn-group {
             display: flex;
@@ -1267,40 +1258,76 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>🧾 Conversor XML a PDF</h1>
-        <p class="subtitle">ManchesterTex E.I.R.L. - Facturación Electrónica</p>
+        <h1>Conversor XML a PDF</h1>
+        
         
         <div class="main-content">
             <div class="right-panel">
-                <form id="convertirForm" method="POST" action="/convertir" enctype="multipart/form-data">
+                <form id="convertirForm" method="POST" action="/convertir" enctype="multipart/form-data" onsubmit="return validarArchivo()">
                     <div class="form-group">
-                        <label>📤 Seleccionar archivo XML:</label>
+                        <label>Seleccionar archivo XML:</label>
                         <label for="xml_file" class="file-label" id="fileLabel">
-                            Haz clic para seleccionar archivo (XML o CSV)
+                            Subir archivo
                         </label>
-                        <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" required onchange="updateFileName()">
-                        <div class="file-container" id="fileContainer" {% if not xml_file_name %}style="display: none;"{% endif %}>
-                            <div class="file-name" id="fileName">{% if xml_file_name %}{{xml_file_name}}{% else %}Ningún archivo seleccionado{% endif %}</div>
-                            <button type="button" class="file-x-btn" id="fileXBtn" onclick="removeFile()">✕</button>
-                        </div>
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" onchange="updateFileName()">
                     </div>
                     
                     <div class="form-group">
-                        <label for="formato">📋 Formato de salida:</label>
-                        <select name="formato" id="formato" onchange="checkFormato()">
-                            <option value="ticket">Ticket 80mm</option>
-                            <option value="yapes">YAPES Resumen</option>
-                            <option value="shipping_label">Etiqueta de Envío</option>
+                        <label for="formato">Formato de salida:</label>
+                        <select name="formato" id="formato" onchange="checkFormato(); toggleAgencia()">
+                            <option value="ticket" {% if selected_formato=='ticket' %}selected{% endif %}>Ticket 80mm</option>
+                            <option value="yapes" {% if selected_formato=='yapes' %}selected{% endif %}>YAPES Resumen</option>
+                            <option value="shipping_label" {% if selected_formato=='shipping_label' %}selected{% endif %}>Etiqueta de Envío</option>
                         </select>
                     </div>
                     
-                    <button type="submit" class="btn btn-convert" id="convertirBtn" disabled>🔄 Convertir a PDF</button>
-                {% if pdf_url %}
-                <div class="viewer-header">
-                    <a href="/download" class="btn btn-download">📥 Descargar PDF</a>
-                    <a href="/clear" class="btn btn-clean">🗑️ Limpiar</a>
-                </div>
-                {% endif %}
+                    <div class="form-group" id="recojeGroup" style="display: none;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="recoje_otra_persona" id="recoje_otra_persona" onchange="toggleRecojeOtraPersona()" style="width: 18px; height: 18px;"
+                            {% if selected_recoje %}checked{% endif %}>
+                            <span style="font-weight: bold;">Recoge otra persona</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" id="recojeDatosGroup" style="display: none;">
+                        <label for="recoje_dni">DNI:</label>
+                        <input type="text" name="recoje_dni" id="recoje_dni" placeholder="Solo números (máx 8)" maxlength="8" pattern="[0-9]{8}" value="{{ selected_recoje_dni or '' }}">
+                        
+                        <label for="recoje_nombre">Nombres y Apellidos:</label>
+                        <input type="text" name="recoje_nombre" id="recoje_nombre" placeholder="Solo letras (max 50)" maxlength="50" value="{{ selected_recoje_nombre or '' }}">
+                        
+                        <label for="recoje_direccion">Dirección:</label>
+                        <input type="text" name="recoje_direccion" id="recoje_direccion" placeholder="Solo letras (máx 50)" maxlength="50" value="{{ selected_recoje_direccion or '' }}">
+                    </div>
+                    
+                    <div class="form-group" id="agenciaGroup" style="display: none;">
+                        <label for="agencia">Agencia:</label>
+                        <select name="agencia" id="agencia" onchange="toggleOtraAgencia()">
+                            <option value="">Seleccionar agencia</option>
+                            <option value="FLORES" {% if selected_agencia=='FLORES' %}selected{% endif %}>FLORES</option>
+                            <option value="MARVISUR" {% if selected_agencia=='MARVISUR' %}selected{% endif %}>MARVISUR</option>
+                            <option value="GRAEL" {% if selected_agencia=='GRAEL' %}selected{% endif %}>GRAEL</option>
+                            <option value="RANA EXPRESS" {% if selected_agencia=='RANA EXPRESS' %}selected{% endif %}>RANA EXPRESS</option>
+                            <option value="OTRA" {% if selected_agencia=='OTRA' %}selected{% endif %}>Otra agencia</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="otraAgenciaGroup" style="display: none;">
+                        <label for="otra_agencia">Especifique agencia:</label>
+                        <textarea name="otra_agencia" id="otra_agencia" placeholder="Nombre de agencia" maxlength="50" rows="1">{{ selected_otra_agencia or '' }}</textarea>
+                    </div>
+                    
+                    <div class="form-group" id="notasGroup" style="display: none;">
+                        <label for="other_notes">Otras indicaciones:</label>
+                        <textarea name="other_notes" id="other_notes" placeholder="Máx 100 caracteres" maxlength="100" rows="2">{{ selected_notes or '' }}</textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-convert" id="convertirBtn">Convertir a PDF</button>
+                    <br><br>
+                    <a href="javascript:void(0)" class="btn btn-clean" onclick="confirmarLimpiar()">Limpiar</a>
+                    {% if pdf_url %}
+                    <a href="/download" class="btn btn-download">Descargar PDF</a>
+                    {% endif %}
             </div>
             
             <div class="left-panel">
@@ -1308,14 +1335,14 @@ HTML_TEMPLATE = """
                 <iframe id="pdf-viewer" src="{{pdf_url}}" style="width:100%;height:600px;border:none;border-radius:8px;"></iframe>
                 {% else %}
                 <div class="empty-state">
-                    <h2>📄 Esperando documento</h2>
+                    <h2>Esperando documento</h2>
                     <p>Sube un archivo XML para previsualizar el PDF</p>
                 </div>
                 {% endif %}
                 
                 {% if info %}
                 <div class="info">
-                    <h3>📄 Información del Documento</h3>
+                    <h3>Información del Documento</h3>
                     <p><strong>Tipo:</strong> {{ info.tipo }}</p>
                     <p><strong>Número:</strong> {{ info.numero }}</p>
                     <p><strong>Emisor:</strong> {{ info.emisor }}</p>
@@ -1327,59 +1354,163 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
-        <p class="footer">
-            Sistema desarrollado por ManchesterTex E.I.R.L.<br>
-            © 2026 Todos los derechos reservados
-        </p>
+        
     </div>
     
     <script>
     function updateFileName() {
         var input = document.getElementById('xml_file');
-        var fileName = document.getElementById('fileName');
         var fileLabel = document.getElementById('fileLabel');
-        var fileContainer = document.getElementById('fileContainer');
-        var convertirBtn = document.getElementById('convertirBtn');
         
         if (input.files && input.files[0]) {
             var name = input.files[0].name;
-            fileName.textContent = name;
-            fileLabel.style.display = 'none';
-            fileContainer.style.display = 'flex';
-            convertirBtn.disabled = false;
+            fileLabel.classList.add('active');
+            fileLabel.innerHTML = name + ' <span onclick="removeFile()" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
         }
     }
     
     function checkFormato() {
-        var convertirBtn = document.getElementById('convertirBtn');
+        // Botón siempre habilitado
+    }
+    
+    function validarArchivo() {
         var input = document.getElementById('xml_file');
+        var fileLabel = document.getElementById('fileLabel');
+        
+        // Verificar si hay archivo seleccionado o si ya se había subido uno antes
+        if ((!input.files || !input.files[0]) && (!fileLabel.classList.contains('active'))) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Archivo requerido',
+                text: 'Por favor, ingresa un archivo XML o CSV válido para continuar',
+                confirmButtonColor: '#667eea',
+                confirmButtonText: 'Aceptar'
+            });
+            return false;
+        }
+        
+        // Verificar que tenga contenido el archivo si es nuevo
         if (input.files && input.files[0]) {
-            convertirBtn.disabled = false;
+            var fileName = input.files[0].name.toLowerCase();
+            if (!fileName.endsWith('.xml') && !fileName.endsWith('.csv')) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Archivo inválido',
+                    text: 'El archivo debe ser XML o CSV',
+                    confirmButtonColor: '#dc2626',
+                    confirmButtonText: 'Aceptar'
+                });
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    function confirmarLimpiar() {
+        Swal.fire({
+            icon: 'question',
+            title: '¿Limpiar formulario?',
+            text: 'Se eliminarán todos los datos ingresados',
+            showCancelButton: true,
+            confirmButtonColor: '#b91c1c',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Sí, limpiar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = '/clear';
+            }
+        });
+    }
+    
+    function toggleAgencia() {
+        var formato = document.getElementById('formato').value;
+        var agenciaGroup = document.getElementById('agenciaGroup');
+        var notasGroup = document.getElementById('notasGroup');
+        var recojeGroup = document.getElementById('recojeGroup');
+        
+        if (formato === 'shipping_label') {
+            agenciaGroup.style.display = 'block';
+            notasGroup.style.display = 'block';
+            recojeGroup.style.display = 'block';
+        } else {
+            agenciaGroup.style.display = 'none';
+            notasGroup.style.display = 'none';
+            recojeGroup.style.display = 'none';
+            document.getElementById('agencia').value = '';
+            document.getElementById('otra_agencia').value = '';
+            document.getElementById('other_notes').value = '';
+            document.getElementById('recoje_otra_persona').checked = false;
+            toggleRecojeOtraPersona();
+            toggleOtraAgencia();
         }
     }
     
-    function removeFile() {
+    function toggleRecojeOtraPersona() {
+        var checkbox = document.getElementById('recoje_otra_persona');
+        var datosGroup = document.getElementById('recojeDatosGroup');
+        
+        if (checkbox.checked) {
+            datosGroup.style.display = 'block';
+        } else {
+            datosGroup.style.display = 'none';
+            document.getElementById('recoje_dni').value = '';
+            document.getElementById('recoje_nombre').value = '';
+            document.getElementById('recoje_direccion').value = '';
+        }
+    }
+    
+    function toggleOtraAgencia() {
+        var agencia = document.getElementById('agencia').value;
+        var otraAgenciaGroup = document.getElementById('otraAgenciaGroup');
+        
+        if (agencia === 'OTRA') {
+            otraAgenciaGroup.style.display = 'block';
+        } else {
+            otraAgenciaGroup.style.display = 'none';
+            document.getElementById('otra_agencia').value = '';
+        }
+    }
+    
+    function removeFile(e) {
+        if (e) e.stopPropagation();
         var input = document.getElementById('xml_file');
-        var fileName = document.getElementById('fileName');
         var fileLabel = document.getElementById('fileLabel');
-        var fileContainer = document.getElementById('fileContainer');
-        var convertirBtn = document.getElementById('convertirBtn');
         
         input.value = '';
-        fileName.textContent = 'Ningún archivo seleccionado';
-        fileLabel.style.display = 'block';
-        fileContainer.style.display = 'none';
-        convertirBtn.disabled = true;
+        fileLabel.classList.remove('active');
+        fileLabel.innerHTML = 'Subir archivo';
     }
     
     // On page load, mantener archivo si existe
     {% if xml_file_name %}
     document.addEventListener('DOMContentLoaded', function() {
         var fileLabel = document.getElementById('fileLabel');
-        var fileContainer = document.getElementById('fileContainer');
-        var fileName = document.getElementById('fileName');
-        fileLabel.style.display = 'none';
-        fileContainer.style.display = 'flex';
+        
+        fileLabel.classList.add('active');
+        fileLabel.innerHTML = '{{ xml_file_name }} <span onclick="removeFile()" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
+        
+        // Mantener formato seleccionado
+        var formato = '{{ selected_formato }}';
+        if (formato === 'shipping_label') {
+            document.getElementById('agenciaGroup').style.display = 'block';
+            document.getElementById('notasGroup').style.display = 'block';
+            document.getElementById('recojeGroup').style.display = 'block';
+            
+            // Ver si mostrar otra agencia
+            var agencia = '{{ selected_agencia }}';
+            if (agencia === 'OTRA') {
+                document.getElementById('otraAgenciaGroup').style.display = 'block';
+            }
+            
+            // Ver si mostrar datos de recoje
+            var recoje = '{{ selected_recoje }}';
+            if (recoje === 'true') {
+                document.getElementById('recoje_otra_persona').checked = true;
+                document.getElementById('recojeDatosGroup').style.display = 'block';
+            }
+        }
     });
     {% endif %}
     </script>
@@ -1398,16 +1529,32 @@ def index():
     info = None
     pdf_name = None
     xml_file_name = None
+    selected_formato = 'ticket'
+    selected_agencia = ''
+    selected_otra_agencia = ''
+    selected_notes = ''
+    selected_recoje = ''
+    selected_recoje_dni = ''
+    selected_recoje_nombre = ''
+    selected_recoje_direccion = ''
     
     if temp_id:
-        pdf_path = session.get(f'pdf_{temp_id}')
-        if pdf_path and os.path.exists(pdf_path):
+        pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
+        if os.path.exists(pdf_path):
             pdf_url = url_for('view_pdf', temp_id=temp_id)
             info = session.get('pdf_info')
             pdf_name = session.get('pdf_name')
             xml_file_name = session.get('xml_file_name')
+            selected_formato = session.get('selected_formato', 'ticket')
+            selected_agencia = session.get('selected_agencia', '')
+            selected_otra_agencia = session.get('selected_otra_agencia', '')
+            selected_notes = session.get('selected_notes', '')
+            selected_recoje = session.get('selected_recoje', '')
+            selected_recoje_dni = session.get('selected_recoje_dni', '')
+            selected_recoje_nombre = session.get('selected_recoje_nombre', '')
+            selected_recoje_direccion = session.get('selected_recoje_direccion', '')
     
-    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name)
+    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name, selected_formato=selected_formato, selected_agencia=selected_agencia, selected_otra_agencia=selected_otra_agencia, selected_notes=selected_notes, selected_recoje=selected_recoje, selected_recoje_dni=selected_recoje_dni, selected_recoje_nombre=selected_recoje_nombre, selected_recoje_direccion=selected_recoje_direccion)
 
 
 @app.route('/convertir', methods=['POST'])
@@ -1415,31 +1562,69 @@ def index():
 def convertir():
     """Endpoint para convertir XML/CSV a PDF"""
     try:
-        # Validar archivo
+        # Obtener datos del formulario
         xml_file = request.files.get('xml_file')
-        if not xml_file or xml_file.filename == '':
-            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, selecciona un archivo")
-        
-        filename = xml_file.filename.lower()
         formato = request.form.get('formato', CONFIG['DEFAULT_FORMAT'])
+        agencia = request.form.get('agencia', '')
+        otra_agencia = request.form.get('otra_agencia', '')
+        other_notes = request.form.get('other_notes', '')
+        recoje_otra_persona = request.form.get('recoje_otra_persona', '')
+        recoje_dni = request.form.get('recoje_dni', '')
+        recoje_nombre = request.form.get('recoje_nombre', '')
+        recoje_direccion = request.form.get('recoje_direccion', '')
+        
+        # Verificar si hay archivo nuevo o usar el de sesión
+        xml_data = None
+        filename = ''
+        
+        if xml_file and xml_file.filename:
+            # Archivo nuevo seleccionado
+            import uuid as uuid_module
+            xml_temp_id = uuid_module.uuid4().hex
+            xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            xml_data = xml_file.read()
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data)
+            filename = xml_file.filename.lower()
+            # Guardar path en sesión
+            session['xml_file_path'] = xml_path
+            session['xml_file_name'] = xml_file.filename
+        elif session.get('xml_file_path') and os.path.exists(session.get('xml_file_path')):
+            # Usar archivo de sesión
+            xml_path = session.get('xml_file_path')
+            with open(xml_path, 'rb') as f:
+                xml_data = f.read()
+            filename = session.get('xml_file_name', '').lower()
+        
+        if not xml_data:
+            return render_template_string(HTML_TEMPLATE, error="Por favor, selecciona un archivo")
+        
+        # Construir agency_name
+        agency_name = otra_agencia if agencia == 'OTRA' else agencia
         
         # Determinar tipo de archivo
         if filename.endswith('.csv') or formato == 'yapes':
             if not filename.endswith('.csv'):
-                return render_template_string(HTML_TEMPLATE, error="❌ Para formato YAPES debe subir un archivo CSV")
+                return render_template_string(HTML_TEMPLATE, error="Para formato YAPES debe subir un archivo CSV")
             
-            # Procesar CSV para YAPES
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_csv:
-                xml_file.save(tmp_csv.name)
-                csv_path = tmp_csv.name
+            # Procesar CSV para YAPES - usar el archivo XML/CSV guardado
+            csv_path = session.get('csv_file_path')
+            if not csv_path or not os.path.exists(csv_path):
+                # Copiar el archivo XML como CSV
+                import uuid as uuid_module
+                csv_temp_id = uuid_module.uuid4().hex
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
+                with open(csv_path, 'wb') as f:
+                    f.write(xml_data)
+                session['csv_file_path'] = csv_path
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='_yapes.pdf') as tmp_pdf:
-                output_path = tmp_pdf.name
+            pdf_temp_id = uuid_module.uuid4().hex
+            output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
             
             yapes = YapesPDF(csv_path, output_path)
             
             if not yapes.parse_csv():
-                return render_template_string(HTML_TEMPLATE, error="❌ Error al procesar el CSV. Formato: Nombre,Monto,Fecha")
+                return render_template_string(HTML_TEMPLATE, error="Error al procesar el CSV. Formato: Nombre,Monto,Fecha")
             
             yapes.generate_pdf()
             
@@ -1459,20 +1644,30 @@ def convertir():
         elif filename.endswith('.xml'):
             # Procesar XML para Ticket
             if not filename.endswith('.xml'):
-                return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser de tipo XML (.xml)")
+                return render_template_string(HTML_TEMPLATE, error="El archivo debe ser de tipo XML (.xml)")
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
-                xml_file.save(tmp_xml.name)
-                xml_path = tmp_xml.name
+            # Ya tenemos el xml_path guardado en sesión, usarlo
+            xml_path = session.get('xml_file_path')
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='_ticket.pdf') as tmp_pdf:
-                output_path = tmp_pdf.name
+            pdf_temp_id = uuid.uuid4().hex
+            output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
             
-            factura = FacturaXMLtoPDF(xml_path, output_path)
+            extra_data = {}
+            if formato == 'shipping_label':
+                extra_data = {
+                    'agency_name': agency_name,
+                    'other_notes': other_notes,
+                    'recoje_otra_persona': recoje_otra_persona == 'on',
+                    'recoje_dni': recoje_dni,
+                    'recoje_nombre': recoje_nombre.upper() if recoje_nombre else '',
+                    'recoje_direccion': recoje_direccion.upper() if recoje_direccion else ''
+                }
+            
+            factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
             
             if not factura.parse_xml():
                 error_msg = factura.errors[0] if factura.errors else "Error al procesar el XML"
-                return render_template_string(HTML_TEMPLATE, error=f"❌ {error_msg}")
+                return render_template_string(HTML_TEMPLATE, error=f"{error_msg}")
                         
             factura.generate_pdf(formato)
 
@@ -1491,22 +1686,31 @@ def convertir():
                 'fecha': factura.data.get('fecha_emision', 'N/A')
             }
         else:
-            return render_template_string(HTML_TEMPLATE, error="❌ Formato no soportado. Use XML o CSV")
+            return render_template_string(HTML_TEMPLATE, error="Formato no soportado. Use XML o CSV")
         
-        # Guardar PDF en archivo temporal y registrar en sesión
-        temp_id = str(uuid.uuid4())
-        session[f'pdf_{temp_id}'] = output_path
+        # Guardar PDF en archivo temporal
+        # Usar pdf_temp_id que ya fue generado
+        temp_id = pdf_temp_id
         session['current_pdf'] = temp_id
         session['pdf_name'] = pdf_name
         session['pdf_info'] = info
-        session['xml_file_name'] = xml_file.filename  # Mantener nombre del archivo
+        session['xml_file_name'] = session.get('xml_file_name', '')
+        session['selected_formato'] = formato
+        session['selected_agencia'] = agencia if formato == 'shipping_label' else ''
+        session['selected_otra_agencia'] = otra_agencia if formato == 'shipping_label' else ''
+        session['selected_notes'] = other_notes if formato == 'shipping_label' else ''
+        session['selected_recoje'] = 'true' if recoje_otra_persona == 'on' else ''
+        session['selected_recoje_dni'] = recoje_dni if formato == 'shipping_label' else ''
+        session['selected_recoje_nombre'] = recoje_nombre if formato == 'shipping_label' else ''
+        session['selected_recoje_direccion'] = recoje_direccion if formato == 'shipping_label' else ''
         
         # Retornar con vista previa
-        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=xml_file.filename)
+        logger.info(f"PDF generado: temp_id={temp_id}, path={output_path}")
+        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
         
     except Exception as e:
         logger.exception("Error en conversión")
-        return render_template_string(HTML_TEMPLATE, error=f"❌ Error: {str(e)}")
+        return render_template_string(HTML_TEMPLATE, error=f"Error: {str(e)}")
 
 
 @app.route('/health')
@@ -1519,9 +1723,12 @@ def health():
 def view_pdf(temp_id):
     """Servir PDF generado"""
     try:
-        pdf_path = session.get(f'pdf_{temp_id}')
-        if not pdf_path or not os.path.exists(pdf_path):
-            return "PDF no encontrado", 404
+        pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
+        logger.info(f"Buscando PDF en: {pdf_path}, existe: {os.path.exists(pdf_path)}")
+        
+        if not os.path.exists(pdf_path):
+            files = os.listdir('temp_files') if os.path.exists('temp_files') else []
+            return f"PDF no encontrado. Buscado: {pdf_path}<br>Archivos disponibles: {files}", 404
         
         return send_file(pdf_path, mimetype='application/pdf', as_attachment=False)
     except Exception as e:
@@ -1534,7 +1741,7 @@ def download_pdf():
     """Descargar PDF"""
     try:
         temp_id = session.get('current_pdf')
-        pdf_path = session.get(f'pdf_{temp_id}')
+        pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
         pdf_name = session.get('pdf_name', 'documento.pdf')
         
         if not pdf_path or not os.path.exists(pdf_path):
