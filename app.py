@@ -768,7 +768,7 @@ class FacturaXMLtoPDF:
         
         try:
             qr_img = qrcode.make(cadena_qr)
-qr_path = "images/qr_mostrario.png"
+            qr_path = "images/qr_mostrario.png"
             qr_img.save(qr_path)
             
             if ruc and os.path.exists(qr_path):
@@ -1304,7 +1304,7 @@ HTML_TEMPLATE = """
                     
                     <div class="form-group">
                         <label for="formato">📋 Formato de salida:</label>
-                        <select name="formato" id="formato">
+                        <select name="formato" id="formato" onchange="checkFormato()">
                             <option value="ticket">Ticket 80mm</option>
                             <option value="yapes">YAPES Resumen</option>
                             <option value="shipping_label">Etiqueta de Envío</option>
@@ -1363,6 +1363,14 @@ HTML_TEMPLATE = """
             fileName.textContent = name;
             fileLabel.style.display = 'none';
             fileContainer.style.display = 'flex';
+            convertirBtn.disabled = false;
+        }
+    }
+    
+    function checkFormato() {
+        var convertirBtn = document.getElementById('convertirBtn');
+        var input = document.getElementById('xml_file');
+        if (input.files && input.files[0]) {
             convertirBtn.disabled = false;
         }
     }
