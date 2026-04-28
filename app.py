@@ -859,6 +859,35 @@ HTML_TEMPLATE = """
             background: #f0fdf4;
             color: #166534;
         }
+        .file-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .file-container .file-name {
+            flex: 1;
+            padding: 12px 15px;
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+            border-radius: 10px;
+            color: #166534;
+            font-weight: 500;
+            word-break: break-all;
+        }
+        .file-x-btn {
+            padding: 8px 12px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .file-x-btn:hover {
+            background: #dc2626;
+        }
         select { 
             width: 100%; 
             padding: 15px; 
@@ -959,7 +988,10 @@ HTML_TEMPLATE = """
                             Haz clic para seleccionar archivo (XML o CSV)
                         </label>
                         <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" required onchange="updateFileName()">
-                        <div class="file-name empty" id="fileName">Ningún archivo seleccionado</div>
+                        <div class="file-container" id="fileContainer" style="display: none;">
+                            <div class="file-name" id="fileName">Ningún archivo seleccionado</div>
+                            <button type="button" class="file-x-btn" id="fileXBtn" onclick="removeFile()">✕</button>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -1014,22 +1046,30 @@ HTML_TEMPLATE = """
         var input = document.getElementById('xml_file');
         var fileName = document.getElementById('fileName');
         var fileLabel = document.getElementById('fileLabel');
+        var fileContainer = document.getElementById('fileContainer');
         var convertirBtn = document.getElementById('convertirBtn');
         
         if (input.files && input.files[0]) {
             var name = input.files[0].name;
             fileName.textContent = name;
-            fileName.classList.remove('empty');
-            fileLabel.textContent = name;
-            fileLabel.classList.add('active');
+            fileLabel.style.display = 'none';
+            fileContainer.style.display = 'flex';
             convertirBtn.disabled = false;
-        } else {
-            fileName.textContent = 'Ningún archivo seleccionado';
-            fileName.classList.add('empty');
-            fileLabel.textContent = 'Haz clic para seleccionar archivo XML';
-            fileLabel.classList.remove('active');
-            convertirBtn.disabled = true;
         }
+    }
+    
+    function removeFile() {
+        var input = document.getElementById('xml_file');
+        var fileName = document.getElementById('fileName');
+        var fileLabel = document.getElementById('fileLabel');
+        var fileContainer = document.getElementById('fileContainer');
+        var convertirBtn = document.getElementById('convertirBtn');
+        
+        input.value = '';
+        fileName.textContent = 'Ningún archivo seleccionado';
+        fileLabel.style.display = 'block';
+        fileContainer.style.display = 'none';
+        convertirBtn.disabled = true;
     }
     </script>
 </body>
