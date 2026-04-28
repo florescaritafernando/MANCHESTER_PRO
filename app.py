@@ -124,14 +124,15 @@ class YapesPDF:
                 
                 pdf.set_font("Arial", '', 9)
                 for monto in montos:
-                    pdf.cell(3, 3, "-", 0, 0, 'L')
-                    pdf.cell(10, 3, "S/.", 0, 0, 'L')
-                    pdf.cell(0, 3, f"{monto:.2f}", 0, 1, 'R')
+                    pdf.cell(3, 5, "-", 0, 0, 'L')
+                    pdf.cell(10, 5, "S/.", 0, 0, 'L')
+                    pdf.cell(0, 5, f"{monto:.2f}", 0, 1, 'R')
                 
+                # Total individual por nombre
                 total_nombre = sum(montos)
                 pdf.set_font("Arial", 'B', 10)
-                pdf.cell(0, 4, f"TOTAL: S/. {total_nombre:.2f}", 0, 1, 'R')
-                pdf.ln(2)
+                pdf.cell(0, 5, f"TOTAL: S/. {total_nombre:.2f}", 0, 1, 'R')
+                pdf.ln(3)
             else:
                 # Dos columnas
                 for i in range(0, len(nombres), 2):
@@ -151,42 +152,40 @@ class YapesPDF:
                     else:
                         pdf.cell(col_width, 4, "", 0, 1, 'L')
                     
-                    # Montos columna 1
+                    # Guardar posición Y para montos columna 2
+                    y_start = pdf.get_y()
+                    
+                    # Montos columna 1 con padding
                     pdf.set_font("Arial", '', 9)
-                    y_pos = pdf.get_y()
                     for monto in montos1:
-                        pdf.cell(3, 3, "-", 0, 0, 'L')
-                        pdf.cell(10, 3, "S/.", 0, 0, 'L')
-                        pdf.cell(col_width - 15, 3, f"{monto:.2f}", 0, 1, 'R')
+                        pdf.cell(3, 5, "-", 0, 0, 'L')
+                        pdf.cell(10, 5, "S/.", 0, 0, 'L')
+                        pdf.cell(col_width - 15, 5, f"{monto:.2f}", 0, 1, 'R')
                     
-                    #Montos columna 2
-                    pdf.set_y(y_pos)
-                    if nombre2:
-                        for monto in montos2:
-                            pdf.cell(col_width + 3, 3, "-", 0, 0, 'L')
-                            pdf.cell(10, 3, "S/.", 0, 0, 'L')
-                            pdf.cell(col_width, 3, f"{monto:.2f}", 0, 1, 'R')
-                    
-                    # Totales por nombre
+                    # Total individual columna 1
                     pdf.set_font("Arial", 'B', 10)
-                    pdf.cell(col_width - 10, 4, "TOTAL:", 0, 0, 'L')
-                    pdf.cell(10, 4, f"S/. {total1:.2f}", 0, 0, 'R')
+                    pdf.cell(col_width - 10, 5, "TOTAL:", 0, 0, 'L')
+                    pdf.cell(10, 5, f"S/. {total1:.2f}", 0, 1, 'R')
+                    
+                    # Montos columna 2
                     if nombre2:
-                        pdf.cell(col_width - 10, 4, "TOTAL:", 0, 0, 'L')
-                        pdf.cell(10, 4, f"S/. {total2:.2f}", 0, 1, 'R')
+                        pdf.set_y(y_start)
+                        pdf.set_font("Arial", '', 9)
+                        for monto in montos2:
+                            pdf.cell(col_width + 3, 5, "-", 0, 0, 'L')
+                            pdf.cell(10, 5, "S/.", 0, 0, 'L')
+                            pdf.cell(col_width, 5, f"{monto:.2f}", 0, 1, 'R')
+                        
+                        # Total individual columna 2
+                        pdf.set_font("Arial", 'B', 10)
+                        pdf.cell(col_width + 3, 5, "", 0, 0)
+                        pdf.cell(col_width - 10, 5, "TOTAL:", 0, 0, 'L')
+                        pdf.cell(10, 5, f"S/. {total2:.2f}", 0, 1, 'R')
                     else:
-                        pdf.cell(col_width, 4, "", 0, 1, 'L')
+                        # Si no hay nombre2, completar espacio
+                        pdf.set_y(y_start + max(len(montos1), 1) * 5 + 5)
                     
                     pdf.ln(3)
-            
-            # Total de la fecha
-            total_fecha = sum(sum(agrupado[fecha][n]) for n in nombres)
-            pdf.set_font("Arial", 'B', 11)
-            pdf.cell(page_width/2, 5, "TOTAL:", 0, 0, 'L')
-            pdf.cell(page_width/2, 5, f"S/. {total_fecha:.2f}", 0, 1, 'R')
-            pdf.ln(2)
-            pdf.cell(0, 1, "", "T", 1)
-            pdf.ln(1)
         
         pdf.output(self.output_path)
         logger.info(f"PDF YAPES generado: {self.output_path}")
