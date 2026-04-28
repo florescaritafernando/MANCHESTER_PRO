@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from fpdf import FPDF
 import os
 import tempfile
+import io
 from typing import Dict, Any, Optional
 import base64
 from datetime import datetime
@@ -1580,21 +1581,27 @@ def convertir():
         if xml_file and xml_file.filename:
             # Archivo nuevo seleccionado
             import uuid as uuid_module
+            xml_data = xml_file.read()
+            filename = xml_file.filename.lower()
+            # Guardar contenido en sesión (para Render - archivos efímeros)
+            session['xml_file_data'] = xml_data
+            session['xml_file_name'] = xml_file.filename
+            
+            # También guardar en archivo temporal para desarrollo local
             xml_temp_id = uuid_module.uuid4().hex
             xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
-            xml_data = xml_file.read()
             with open(xml_path, 'wb') as f:
                 f.write(xml_data)
-            filename = xml_file.filename.lower()
-            # Guardar path en sesión
             session['xml_file_path'] = xml_path
-            session['xml_file_name'] = xml_file.filename
-        elif session.get('xml_file_path') and os.path.exists(session.get('xml_file_path')):
-            # Usar archivo de sesión
-            xml_path = session.get('xml_file_path')
-            with open(xml_path, 'rb') as f:
-                xml_data = f.read()
+        elif session.get('xml_file_data'):
+            # Usar archivo de sesión (desde memoria)
+            xml_data = session.get('xml_file_data')
             filename = session.get('xml_file_name', '').lower()
+            xml_path = session.get('xml_file_path', '')
+        else:
+            xml_data = None
+            filename = ''
+            xml_path = ''
         
         if not xml_data:
             return render_template_string(HTML_TEMPLATE, error="Por favor, selecciona un archivo")
@@ -1688,8 +1695,7 @@ def convertir():
         else:
             return render_template_string(HTML_TEMPLATE, error="Formato no soportado. Use XML o CSV")
         
-        # Guardar PDF en archivo temporal
-        # Usar pdf_temp_id que ya fue generado
+        # Guardar PDF en sesión (en memoria para Render)
         temp_id = pdf_temp_id
         session['current_pdf'] = temp_id
         session['pdf_name'] = pdf_name
@@ -1705,7 +1711,7 @@ def convertir():
         session['selected_recoje_direccion'] = recoje_direccion if formato == 'shipping_label' else ''
         
         # Retornar con vista previa
-        logger.info(f"PDF generado: temp_id={temp_id}, path={output_path}")
+        logger.info(f"PDF generado: temp_id={temp_id}")
         return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
         
     except Exception as e:
@@ -1721,19 +1727,64 @@ def health():
 
 @app.route('/pdf/<temp_id>')
 def view_pdf(temp_id):
-    """Servir PDF generado"""
+    """Servir PDF generado - regenera bajo demanda"""
     try:
-        pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
-        logger.info(f"Buscando PDF en: {pdf_path}, existe: {os.path.exists(pdf_path)}")
+        # Verificar que el temp_id coincida con el actual
+        if temp_id != session.get('current_pdf'):
+            return "PDF no encontrado o expirado", 404
         
-        if not os.path.exists(pdf_path):
-            files = os.listdir('temp_files') if os.path.exists('temp_files') else []
-            return f"PDF no encontrado. Buscado: {pdf_path}<br>Archivos disponibles: {files}", 404
+        # Obtener datos necesarios de sesión
+        xml_data = session.get('xml_file_data')
+        if not xml_data:
+            return "Archivo XML no encontrado. Por favor, sube el archivo nuevamente.", 404
         
-        return send_file(pdf_path, mimetype='application/pdf', as_attachment=False)
+        pdf_name = session.get('pdf_name', 'documento.pdf')
+        formato = session.get('selected_formato', 'ticket')
+        agencia = session.get('selected_agencia', '')
+        otra_agencia = session.get('selected_otra_agencia', '')
+        other_notes = session.get('selected_notes', '')
+        recoje_otra_persona = session.get('selected_recoje', '') == 'true'
+        recoje_dni = session.get('selected_recoje_dni', '')
+        recoje_nombre = session.get('selected_recoje_nombre', '')
+        recoje_direccion = session.get('selected_recoje_direccion', '')
+        
+        # Construir agency_name
+        agency_name = otra_agencia if agencia == 'OTRA' else agencia
+        
+        # Guardar XML temporalmente para generar PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
+            tmp_xml.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+            xml_path = tmp_xml.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
+            output_path = tmp_pdf.name
+        
+        extra_data = {}
+        if formato == 'shipping_label':
+            extra_data = {
+                'agency_name': agency_name,
+                'other_notes': other_notes,
+                'recoje_otra_persona': recoje_otra_persona,
+                'recoje_dni': recoje_dni,
+                'recoje_nombre': recoje_nombre.upper() if recoje_nombre else '',
+                'recoje_direccion': recoje_direccion.upper() if recoje_direccion else ''
+            }
+        
+        # Generar el PDF
+        if formato == 'yapes':
+            # Para YAPES, devolver error si no hay CSV
+            return "Formato YAPES necesita ser regenerado. Por favor, convierte nuevamente.", 404
+        else:
+            factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
+            if not factura.parse_xml():
+                return "Error al procesar el XML", 500
+            factura.generate_pdf(formato)
+        
+        # Servir el PDF
+        return send_file(output_path, mimetype='application/pdf', as_attachment=False)
+        
     except Exception as e:
         logger.exception("Error sirviendo PDF")
-        return str(e), 500
+        return f"Error: {str(e)}", 500
 
 
 @app.route('/download')
@@ -1741,13 +1792,55 @@ def download_pdf():
     """Descargar PDF"""
     try:
         temp_id = session.get('current_pdf')
-        pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
-        pdf_name = session.get('pdf_name', 'documento.pdf')
-        
-        if not pdf_path or not os.path.exists(pdf_path):
+        if not temp_id:
             return "PDF no encontrado", 404
         
-        return send_file(pdf_path, mimetype='application/pdf', as_attachment=True, download_name=pdf_name)
+        # Obtener datos de sesión
+        xml_data = session.get('xml_file_data')
+        if not xml_data:
+            return "Archivo no encontrado. Por favor, sube el archivo nuevamente.", 404
+        
+        # Guardar XML temporalmente
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
+            tmp_xml.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+            xml_path = tmp_xml.name
+        
+        pdf_name = session.get('pdf_name', 'documento.pdf')
+        formato = session.get('selected_formato', 'ticket')
+        agencia = session.get('selected_agencia', '')
+        otra_agencia = session.get('selected_otra_agencia', '')
+        other_notes = session.get('selected_notes', '')
+        recoje_otra_persona = session.get('selected_recoje', '') == 'true'
+        recoje_dni = session.get('selected_recoje_dni', '')
+        recoje_nombre = session.get('selected_recoje_nombre', '')
+        recoje_direccion = session.get('selected_recoje_direccion', '')
+        
+        agency_name = otra_agencia if agencia == 'OTRA' else agencia
+        
+        # Generar PDF temporal
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
+            output_path = tmp_pdf.name
+        
+        extra_data = {}
+        if formato == 'shipping_label':
+            extra_data = {
+                'agency_name': agency_name,
+                'other_notes': other_notes,
+                'recoje_otra_persona': recoje_otra_persona,
+                'recoje_dni': recoje_dni,
+                'recoje_nombre': recoje_nombre.upper() if recoje_nombre else '',
+                'recoje_direccion': recoje_direccion.upper() if recoje_direccion else ''
+            }
+        
+        if formato == 'yapes':
+            return "Formato YAPES necesita ser regenerado. Por favor, convierte nuevamente.", 404
+        else:
+            factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
+            if not factura.parse_xml():
+                return "Error al procesar el XML", 500
+            factura.generate_pdf(formato)
+        
+        return send_file(output_path, mimetype='application/pdf', as_attachment=True, download_name=pdf_name)
     except Exception as e:
         logger.exception("Error descargando PDF")
         return str(e), 500
