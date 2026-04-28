@@ -1097,6 +1097,7 @@ def index():
     pdf_url = None
     info = None
     pdf_name = None
+    xml_file_name = None
     
     if temp_id:
         pdf_path = session.get(f'pdf_{temp_id}')
