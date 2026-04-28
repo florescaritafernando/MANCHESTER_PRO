@@ -24,10 +24,98 @@ app = Flask(__name__)
 # Configuración de la app
 CONFIG = {
     'MAX_FILE_SIZE': 10 * 1024 * 1024,  # 10MB max
-    'ALLOWED_EXTENSIONS': ['.xml'],
+    'ALLOWED_EXTENSIONS': ['.xml', '.csv'],
     'DEFAULT_FORMAT': 'ticket',
     'PAGE_WIDTH': 80,
 }
+
+
+class YapesPDF:
+    """Clase para generar PDF de YAPES"""
+    
+    def __init__(self, csv_path: str, output_path: str):
+        self.csv_path = csv_path
+        self.output_path = output_path
+        self.data = []
+        
+    def parse_csv(self) -> bool:
+        """Parsear archivo CSV"""
+        try:
+            with open(self.csv_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            if len(lines) < 2:
+                return False
+            
+            headers = lines[0].strip().split(',')
+            
+            for line in lines[1:]:
+                if line.strip():
+                    parts = line.strip().split(',')
+                    if len(parts) >= 2:
+                        self.data.append({
+                            'nombre': parts[0].strip(),
+                            'monto': parts[1].strip(),
+                            'fecha': parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
+                        })
+            
+            return len(self.data) > 0
+        except Exception as e:
+            logger.error(f"Error parseando CSV: {e}")
+            return False
+    
+    def generate_pdf(self):
+        """Generar PDF de YAPES"""
+        from collections import defaultdict
+        
+        agrupado = defaultdict(list)
+        for item in self.data:
+            agrupado[item['nombre']].append(item['monto'])
+        
+        fecha_actual = datetime.now().strftime('%d/%m/%Y')
+        
+        pdf = FPDF(orientation='P', unit='mm', format=(80, 200))
+        pdf.set_margins(5, 5, 5)
+        pdf.set_auto_page_break(auto=True, margin=10)
+        pdf.add_page()
+        
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 6, "RESUMEN YAPES RECIBIDOS", 0, 1, 'C')
+        
+        pdf.ln(3)
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 5, f"Fecha: {fecha_actual}", 0, 1, 'L')
+        pdf.ln(3)
+        pdf.cell(0, 1, "", "T", 1)
+        pdf.ln(3)
+        
+        total_general = 0
+        
+        for nombre, montos in agrupado.items():
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(0, 5, f"Para: {nombre}", 0, 1, 'L')
+            pdf.ln(2)
+            
+            pdf.set_font("Arial", '', 9)
+            for monto in montos:
+                pdf.cell(10, 4, "-", 0, 0)
+                pdf.cell(0, 4, f"S/. {monto}", 0, 1, 'L')
+                try:
+                    total_general += float(monto)
+                except:
+                    pass
+            
+            pdf.ln(2)
+        
+        pdf.cell(0, 1, "", "T", 1)
+        pdf.ln(3)
+        
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(50, 6, "TOTAL:", 0, 0)
+        pdf.cell(0, 6, f"S/. {total_general:.2f}", 0, 1, 'R')
+        
+        pdf.output(self.output_path)
+        logger.info(f"PDF YAPES generado: {self.output_path}")
 
 
 def log_request(f):
@@ -764,9 +852,9 @@ HTML_TEMPLATE = """
                     <div class="form-group">
                         <label>📤 Seleccionar archivo XML:</label>
                         <label for="xml_file" class="file-label" id="fileLabel">
-                            Haz clic para seleccionar archivo XML
+                            Haz clic para seleccionar archivo (XML o CSV)
                         </label>
-                        <input type="file" name="xml_file" id="xml_file" accept=".xml" required onchange="updateFileName()">
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" required onchange="updateFileName()">
                         <div class="file-name empty" id="fileName">Ningún archivo seleccionado</div>
                     </div>
                     
@@ -774,6 +862,7 @@ HTML_TEMPLATE = """
                         <label for="formato">📋 Formato de salida:</label>
                         <select name="formato" id="formato">
                             <option value="ticket">Ticket 80mm</option>
+                            <option value="yapes">YAPES Resumen</option>
                         </select>
                     </div>
                     
@@ -863,56 +952,91 @@ def index():
 @app.route('/convertir', methods=['POST'])
 @log_request
 def convertir():
-    """Endpoint para convertir XML a PDF"""
+    """Endpoint para convertir XML/CSV a PDF"""
     try:
         # Validar archivo
         xml_file = request.files.get('xml_file')
         if not xml_file or xml_file.filename == '':
-            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, selecciona un archivo XML")
+            return render_template_string(HTML_TEMPLATE, error="❌ Por favor, selecciona un archivo")
         
-        if not xml_file.filename.lower().endswith('.xml'):
-            return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser de tipo XML (.xml)")
-        
+        filename = xml_file.filename.lower()
         formato = request.form.get('formato', CONFIG['DEFAULT_FORMAT'])
         
-        # Guardar archivo temporal
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
-            xml_file.save(tmp_xml.name)
-            xml_path = tmp_xml.name
-        
-        # Procesar
-        with tempfile.NamedTemporaryFile(delete=False, suffix='_ticket.pdf') as tmp_pdf:
-            output_path = tmp_pdf.name
-        
-        factura = FacturaXMLtoPDF(xml_path, output_path)
-        
-        if not factura.parse_xml():
-            error_msg = factura.errors[0] if factura.errors else "Error al procesar el XML"
-            return render_template_string(HTML_TEMPLATE, error=f"❌ {error_msg}")
-        
-        factura.generate_pdf(formato)
+        # Determinar tipo de archivo
+        if filename.endswith('.csv') or formato == 'yapes':
+            if not filename.endswith('.csv'):
+                return render_template_string(HTML_TEMPLATE, error="❌ Para formato YAPES debe subir un archivo CSV")
+            
+            # Procesar CSV para YAPES
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_csv:
+                xml_file.save(tmp_csv.name)
+                csv_path = tmp_csv.name
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='_yapes.pdf') as tmp_pdf:
+                output_path = tmp_pdf.name
+            
+            yapes = YapesPDF(csv_path, output_path)
+            
+            if not yapes.parse_csv():
+                return render_template_string(HTML_TEMPLATE, error="❌ Error al procesar el CSV. Formato: Nombre,Monto,Fecha")
+            
+            yapes.generate_pdf()
+            
+            # Nombre del archivo PDF
+            fecha = datetime.now().strftime('%Y%m%d')
+            pdf_name = f"YAPES_RESUMEN_{fecha}.pdf"
+            
+            info = {
+                'tipo': 'YAPES RESUMEN',
+                'numero': f"{len(yapes.data)} registros",
+                'emisor': '-',
+                'cliente': 'Varios',
+                'total': '-',
+                'fecha': datetime.now().strftime('%d/%m/%Y')
+            }
+            
+        elif filename.endswith('.xml'):
+            # Procesar XML para Ticket
+            if not filename.endswith('.xml'):
+                return render_template_string(HTML_TEMPLATE, error="❌ El archivo debe ser de tipo XML (.xml)")
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
+                xml_file.save(tmp_xml.name)
+                xml_path = tmp_xml.name
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='_ticket.pdf') as tmp_pdf:
+                output_path = tmp_pdf.name
+            
+            factura = FacturaXMLtoPDF(xml_path, output_path)
+            
+            if not factura.parse_xml():
+                error_msg = factura.errors[0] if factura.errors else "Error al procesar el XML"
+                return render_template_string(HTML_TEMPLATE, error=f"❌ {error_msg}")
+            
+            factura.generate_pdf(formato)
+            
+            # Nombre del archivo PDF: NUMERO_NOMBRE_CLIENTE_TIPO_FORMATO.pdf
+            numero = factura.data.get('numero_factura', 'documento')
+            cliente_nombre = factura.data.get('cliente_nombre', 'cliente').replace(' ', '_')
+            cliente_nombre = ''.join(c for c in cliente_nombre if c.isalnum() or c == '_')
+            tipo_doc = factura.data.get('tipo_documento', 'COMPROBANTE').replace(' ', '')
+            pdf_name = f"{numero}_{cliente_nombre}_{tipo_doc}_{formato}.pdf"
+            
+            info = {
+                'tipo': factura.data.get('tipo_documento', 'N/A'),
+                'numero': numero,
+                'emisor': factura.data.get('emisor_nombre', 'N/A'),
+                'cliente': factura.data.get('cliente_nombre', 'N/A'),
+                'total': factura.format_currency(factura.data.get('total_pagar', '0.00')),
+                'fecha': factura.data.get('fecha_emision', 'N/A')
+            }
+        else:
+            return render_template_string(HTML_TEMPLATE, error="❌ Formato no soportado. Use XML o CSV")
         
         # Leer PDF y convertir a base64
         with open(output_path, 'rb') as f:
             pdf_data = f.read()
             pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
-        
-        # Nombre del archivo PDF: NUMERO_NOMBRE_CLIENTE_TIPO_FORMATO.pdf
-        numero = factura.data.get('numero_factura', 'documento')
-        cliente_nombre = factura.data.get('cliente_nombre', 'cliente').replace(' ', '_')
-        cliente_nombre = ''.join(c for c in cliente_nombre if c.isalnum() or c == '_')
-        tipo_doc = factura.data.get('tipo_documento', 'COMPROBANTE').replace(' ', '')
-        pdf_name = f"{numero}_{cliente_nombre}_{tipo_doc}_{formato}.pdf"
-        
-        # Información del documento
-        info = {
-            'tipo': factura.data.get('tipo_documento', 'N/A'),
-            'numero': numero,
-            'emisor': factura.data.get('emisor_nombre', 'N/A'),
-            'cliente': factura.data.get('cliente_nombre', 'N/A'),
-            'total': factura.format_currency(factura.data.get('total_pagar', '0.00')),
-            'fecha': factura.data.get('fecha_emision', 'N/A')
-        }
         
         # Retornar con vista previa
         return render_template_string(HTML_TEMPLATE, pdf_base64=pdf_base64, info=info, pdf_name=pdf_name)
