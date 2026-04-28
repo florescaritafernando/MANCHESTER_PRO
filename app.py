@@ -988,8 +988,8 @@ HTML_TEMPLATE = """
                             Haz clic para seleccionar archivo (XML o CSV)
                         </label>
                         <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" required onchange="updateFileName()">
-                        <div class="file-container" id="fileContainer" style="display: none;">
-                            <div class="file-name" id="fileName">Ningún archivo seleccionado</div>
+                        <div class="file-container" id="fileContainer" {% if not xml_file_name %}style="display: none;"{% endif %}>
+                            <div class="file-name" id="fileName">{% if xml_file_name %}{{xml_file_name}}{% else %}Ningún archivo seleccionado{% endif %}</div>
                             <button type="button" class="file-x-btn" id="fileXBtn" onclick="removeFile()">✕</button>
                         </div>
                     </div>
@@ -1071,6 +1071,17 @@ HTML_TEMPLATE = """
         fileContainer.style.display = 'none';
         convertirBtn.disabled = true;
     }
+    
+    // On page load, mantener archivo si existe
+    {% if xml_file_name %}
+    document.addEventListener('DOMContentLoaded', function() {
+        var fileLabel = document.getElementById('fileLabel');
+        var fileContainer = document.getElementById('fileContainer');
+        var fileName = document.getElementById('fileName');
+        fileLabel.style.display = 'none';
+        fileContainer.style.display = 'flex';
+    });
+    {% endif %}
     </script>
 </body>
 </html>
@@ -1093,8 +1104,9 @@ def index():
             pdf_url = url_for('view_pdf', temp_id=temp_id)
             info = session.get('pdf_info')
             pdf_name = session.get('pdf_name')
+            xml_file_name = session.get('xml_file_name')
     
-    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name)
+    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name)
 
 
 @app.route('/convertir', methods=['POST'])
@@ -1186,9 +1198,10 @@ def convertir():
         session['current_pdf'] = temp_id
         session['pdf_name'] = pdf_name
         session['pdf_info'] = info
+        session['xml_file_name'] = xml_file.filename  # Mantener nombre del archivo
         
         # Retornar con vista previa
-        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name)
+        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=xml_file.filename)
         
     except Exception as e:
         logger.exception("Error en conversión")
