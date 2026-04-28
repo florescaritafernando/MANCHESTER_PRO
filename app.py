@@ -439,8 +439,207 @@ class FacturaXMLtoPDF:
         """Generar PDF según formato"""
         if output_format == 'ticket':
             self._generate_ticket_pdf()
+        elif output_format == 'shipping_label':
+            self._generate_shipping_label_pdf()
         else:
             raise ValueError(f"Formato no válido: {output_format}")
+    
+    def _generate_shipping_label_pdf(self):
+        """Generar etiqueta de envío 100x150mm"""
+        label_width = 100
+        label_height = 150
+        
+        pdf = FPDF(orientation='P', unit='mm', format=(label_width, label_height))
+        pdf.set_margins(0, 0, 0)
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=False)
+        
+        emisor_nombre = self.data.get('emisor_nombre', 'N/A').upper()
+        emisor_ruc = self.data.get('emisor_ruc', 'N/A')
+        
+        logo_path = "images/logo_manchester.png"
+        logo_width = 35
+        pdf.set_y(5)
+        if os.path.exists(logo_path):
+            pdf.image(logo_path, x=5, y=5, w=logo_width)
+            pdf.set_y(25)
+        else:
+            pdf.set_font("Arial", 'B', 14)
+            pdf.set_xy(5, 5)
+            pdf.cell(35, 7, "MANCHESTER", 0, 0, 'L')
+            pdf.set_y(15)
+        
+        remitente_x = label_width - 5 - 45
+        pdf.set_y(5)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.3)
+        
+        pdf.set_font("Arial", 'B', 9)
+        pdf.set_xy(remitente_x, 5)
+        pdf.cell(45, 5, "REMITENTE", 'TLR', 1, 'C')
+        
+        pdf.set_font("Arial", '', 7)
+        pdf.set_xy(remitente_x, pdf.get_y())
+        pdf.set_char_spacing(0.5)
+        pdf.cell(45, 4, f"RUC: {emisor_ruc}", 'LR', 1, 'C')
+        pdf.set_char_spacing(0.0)
+        
+        pdf.set_font("Arial", 'B', 8)
+        pdf.set_xy(remitente_x, pdf.get_y())
+        
+        if pdf.get_string_width(emisor_nombre) > 40:
+            pdf.set_font("Arial", 'B', 7)
+            pdf.multi_cell(45, 4, emisor_nombre, 'BLR', 'C')
+        else:
+            pdf.cell(45, 4, emisor_nombre, 'BLR', 1, 'C')
+        
+        pdf.line(5, pdf.get_y() + 1, label_width - 5, pdf.get_y() + 1)
+        pdf.set_y(pdf.get_y() + 3)
+        
+        cliente_id = self.data.get('cliente_ID', '')
+        cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
+        
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(0, 5, "DATOS DESTINATARIO", 0, 1, 'C')
+        
+        pdf.set_font("Arial", 'B', 20)
+        
+        if pdf.get_string_width(cliente_nombre) > 200:
+            pdf.set_font("Arial", 'B', 15)
+            pdf.multi_cell(90, 8, cliente_nombre, 0, 'L')
+        else:
+            pdf.multi_cell(90, 8, cliente_nombre, 0, 'L')
+        
+        pdf.ln(2)
+        
+        pdf.set_font("Arial", '', 15)
+        pdf.set_char_spacing(0.5)
+        id_label = "RUC" if len(cliente_id) == 11 else ("DNI" if len(cliente_id) == 8 else "CE")
+        pdf.cell(90, 5, f"{id_label}: {cliente_id}", 0, 1, 'L')
+        pdf.set_char_spacing(0.0)
+        pdf.ln(1)
+        
+        cliente_dir = self.data.get('cliente_direccion', '')
+        cliente_dis = self.data.get('cliente_distrito', '')
+        cliente_pro = self.data.get('cliente_provincia', '')
+        cliente_dep = self.data.get('cliente_departamento', '')
+        
+        invalidos = ['N/A', 'n/a', '-', '--', '---', '', None]
+        
+        c_dir = cliente_dir.strip() if cliente_dir and cliente_dir.strip() not in invalidos else "-"
+        
+        direccion_partes = [cliente_dep, cliente_pro, cliente_dis]
+        direccion_ciudad = [p.strip() for p in direccion_partes if p and p.strip() not in invalidos]
+        direccion_completa = " - ".join(direccion_ciudad).upper()
+        
+        pdf.set_font("Arial", '', 8)
+        pdf.cell(90, 5, "DIRECCIÓN DE ENVIO:", 0, 1, 'L')
+        pdf.set_font("Arial", 'B', 15)
+        pdf.ln(1)
+        
+        pdf.multi_cell(90, 6, c_dir.upper(), 'B', 'L')
+        
+        if direccion_completa:
+            pdf.ln(1)
+            pdf.set_font("Arial", '', 8)
+            pdf.cell(90, 5, "CIUDAD:", 0, 1, 'L')
+            pdf.set_font("Arial", 'B', 15)
+            pdf.ln(1)
+            pdf.multi_cell(90, 5, direccion_completa, 'B', 'L')
+        
+        pdf.ln(3)
+        
+        agency_name = self.data.get('agency_name', '').upper()
+        other_notes = self.data.get('other_notes', '').upper()
+        
+        if agency_name:
+            ancho_label = 20
+            ancho_valor = 70
+            
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(ancho_label, 4, "AGENCIA:", 0, 0, 'L')
+            
+            if pdf.get_string_width(agency_name) > 100:
+                pdf.set_font("Arial", 'B', 8)
+                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
+            else:
+                pdf.multi_cell(ancho_valor, 4, agency_name, 0, 'L')
+            pdf.ln(1)
+        
+        pdf.ln(2)
+        if other_notes:
+            ancho_label = 15
+            ancho_valor = 75
+            
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(ancho_label, 4, "OTROS:", 0, 0, 'L')
+            
+            pdf.set_font("Arial", '', 10)
+            
+            if pdf.get_string_width(other_notes) > 100:
+                pdf.set_font("Arial", '', 8)
+                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
+            else:
+                pdf.multi_cell(ancho_valor, 4, other_notes, 0, 'L')
+            pdf.ln(1)
+        
+        y_qr_start = label_height - 10 - 20
+        qr_width = 20
+        qr_x = 5
+        y_qr_start = label_height - 10 - qr_width
+        
+        qr_path = "images/temp_qr.png"
+        if os.path.exists(qr_path):
+            pdf.image(qr_path, x=qr_x, y=y_qr_start, w=qr_width)
+        else:
+            pdf.set_fill_color(200, 200, 200)
+            pdf.rect(qr_x, y_qr_start, qr_width, qr_width, 'F')
+            pdf.set_font("Arial", '', 8)
+            pdf.set_xy(qr_x, y_qr_start + 12)
+            pdf.cell(qr_width, 5, "QR", 0, 0, 'C')
+        
+        pdf.set_font("Arial", '', 6)
+        pdf.set_xy(qr_x, y_qr_start + qr_width + 1)
+        pdf.cell(qr_width, 4, "CATÁLOGO", 0, 0, 'C')
+        
+        num_documento = self.data.get('numero_factura', 'N/A')
+        fecha = self.data.get('fecha_emision', 'N/A')
+        guia_remision = self.data.get('cliente_guia', 'N/A')
+        
+        fecha_formateada = fecha
+        
+        if fecha != 'N/A':
+            try:
+                objeto_fecha = datetime.strptime(fecha, '%Y-%m-%d')
+                fecha_formateada = objeto_fecha.strftime('%d/%m/%Y')
+            except ValueError:
+                pass
+        
+        info_x = qr_x + qr_width + 5
+        info_width = label_width - 5 - info_x
+        
+        pdf.set_xy(info_x, y_qr_start)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.2)
+        pdf.set_fill_color(255, 255, 255)
+        
+        pdf.set_font("Arial", 'B', 9)
+        pdf.set_char_spacing(1)
+        pdf.cell(info_width, 5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
+        
+        pdf.set_x(info_x)
+        pdf.set_font("Arial", 'B', 9)
+        pdf.cell(info_width, 5, f"FECHA: {fecha_formateada}", 1, 1, 'C', True)
+        
+        if guia_remision != 'N/A' and guia_remision.strip():
+            pdf.set_x(info_x)
+            pdf.set_font("Arial", 'B', 9)
+            pdf.cell(info_width, 5, f"GUÍA: N° {guia_remision}", 1, 1, 'C', True)
+        
+        pdf.set_char_spacing(0)
+        
+        pdf.output(self.output_path)
+        logger.info(f"Etiqueta de envío generada: {self.output_path} (100mm x 150mm)")
 
     def _generate_qr(self, pdf):
         """Generar código QR"""
@@ -999,6 +1198,7 @@ HTML_TEMPLATE = """
                         <select name="formato" id="formato">
                             <option value="ticket">Ticket 80mm</option>
                             <option value="yapes">YAPES Resumen</option>
+                            <option value="shipping_label">Etiqueta de Envío</option>
                         </select>
                     </div>
                     
