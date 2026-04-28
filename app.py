@@ -47,16 +47,21 @@ class YapesPDF:
             if len(lines) < 2:
                 return False
             
-            headers = lines[0].strip().split(',')
-            
             for line in lines[1:]:
                 if line.strip():
                     parts = line.strip().split(',')
                     if len(parts) >= 2:
+                        fecha_raw = parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
+                        try:
+                            fecha_dt = datetime.strptime(fecha_raw, '%d/%m/%Y')
+                            fecha = fecha_dt.strftime('%d/%m/%Y')
+                        except:
+                            fecha = datetime.now().strftime('%d/%m/%Y')
+                        
                         self.data.append({
-                            'nombre': parts[0].strip(),
-                            'monto': parts[1].strip(),
-                            'fecha': parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
+                            'nombre': parts[0].strip().upper(),
+                            'monto': float(parts[1].strip()),
+                            'fecha': fecha
                         })
             
             return len(self.data) > 0
@@ -68,51 +73,106 @@ class YapesPDF:
         """Generar PDF de YAPES"""
         from collections import defaultdict
         
-        agrupado = defaultdict(list)
+        # Agrupar por fecha y nombre
+        agrupado = defaultdict(lambda: defaultdict(float))
         for item in self.data:
-            agrupado[item['nombre']].append(item['monto'])
+            agrupado[item['fecha']][item['nombre']] += item['monto']
         
-        fecha_actual = datetime.now().strftime('%d/%m/%Y')
+        # Obtener todas las fechas y nombres únicos
+        fechas = sorted(agrupado.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+        todos_nombres = set()
+        for fecha in fechas:
+            todos_nombres.update(agrupado[fecha].keys())
+        nombres = sorted(todos_nombres)
         
-        pdf = FPDF(orientation='P', unit='mm', format=(80, 200))
-        pdf.set_margins(5, 5, 5)
-        pdf.set_auto_page_break(auto=True, margin=10)
+        # Ancho de página
+        page_width = 80
+        pdf = FPDF(orientation='P', unit='mm', format=(page_width, 200))
+        pdf.set_margins(2, 2, 2)
+        pdf.set_auto_page_break(auto=True, margin=5)
         pdf.add_page()
         
+        # Encabezado
         pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 6, "RESUMEN YAPES RECIBIDOS", 0, 1, 'C')
+        pdf.cell(0, 5, "RESUMEN YAPES RECIBIDOS", 0, 1, 'C')
         
-        pdf.ln(3)
-        pdf.set_font("Arial", '', 10)
-        pdf.cell(0, 5, f"Fecha: {fecha_actual}", 0, 1, 'L')
-        pdf.ln(3)
+        pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
-        pdf.ln(3)
+        pdf.ln(2)
         
-        total_general = 0
-        
-        for nombre, montos in agrupado.items():
+        # Por cada fecha
+        for fecha in fechas:
             pdf.set_font("Arial", 'B', 10)
-            pdf.cell(0, 5, f"Para: {nombre}", 0, 1, 'L')
-            pdf.ln(2)
+            pdf.cell(0, 5, f"Fecha: {fecha}", 0, 1, 'L')
+            pdf.ln(1)
             
-            pdf.set_font("Arial", '', 9)
-            for monto in montos:
-                pdf.cell(10, 4, "-", 0, 0)
-                pdf.cell(0, 4, f"S/. {monto}", 0, 1, 'L')
-                try:
-                    total_general += float(monto)
-                except:
-                    pass
+            # Calcular totales por nombre para esta fecha
+            totales_nombre = agrupado[fecha]
+            nombres_fecha = sorted(totales_nombre.keys())
             
+            if len(nombres_fecha) == 1:
+                # Una sola columna
+                nombre = nombres_fecha[0]
+                monto = totales_nombre[nombre]
+                pdf.set_font("Arial", 'B', 11)
+                pdf.cell(0, 5, f"{nombre}", 0, 1, 'L')
+                pdf.set_font("Arial", '', 12)
+                pdf.cell(page_width/2, 6, "S/.", 0, 0, 'L')
+                pdf.cell(page_width/2, 6, f"{monto:.2f}", 0, 1, 'R')
+                pdf.ln(2)
+            else:
+                # Dos columnas
+                col_width = page_width / 2 - 1
+                
+                for i in range(0, len(nombres_fecha), 2):
+                    pdf.set_font("Arial", 'B', 10)
+                    
+                    # Columna 1
+                    if i < len(nombres_fecha):
+                        nombre1 = nombres_fecha[i]
+                        monto1 = totales_nombre[nombre1]
+                        pdf.cell(col_width, 5, f"{nombre1}", 0, 0, 'L')
+                    
+                    # Columna 2
+                    if i + 1 < len(nombres_fecha):
+                        nombre2 = nombres_fecha[i + 1]
+                        monto2 = totales_nombre[nombre2]
+                        pdf.cell(col_width, 5, f"{nombre2}", 0, 1, 'L')
+                    elif i < len(nombres_fecha):
+                        pdf.cell(col_width, 5, "", 0, 1, 'L')
+                    
+                    pdf.set_font("Arial", '', 11)
+                    
+                    # Montos
+                    x_pos = pdf.get_x()
+                    if i < len(nombres_fecha):
+                        pdf.cell(col_width/2, 5, "S/.", 0, 0, 'L')
+                        pdf.cell(col_width/2, 5, f"{monto1:.2f}", 0, 0, 'R')
+                    
+                    if i + 1 < len(nombres_fecha):
+                        pdf.cell(col_width/2, 5, "S/.", 0, 0, 'L')
+                        pdf.cell(col_width/2, 5, f"{monto2:.2f}", 0, 1, 'R')
+                    elif i < len(nombres_fecha):
+                        pdf.cell(col_width/2, 5, "", 0, 0)
+                        pdf.cell(col_width/2, 5, "", 0, 1)
+                    
+                    pdf.ln(3)
+            
+            # Total de la fecha
+            total_fecha = sum(totales_nombre.values())
+            pdf.set_font("Arial", 'B', 11)
+            pdf.cell(page_width/2, 5, "TOTAL:", 0, 0, 'L')
+            pdf.cell(page_width/2, 5, f"S/. {total_fecha:.2f}", 0, 1, 'R')
+            pdf.ln(3)
+            pdf.cell(0, 1, "", "T", 1)
             pdf.ln(2)
         
-        pdf.cell(0, 1, "", "T", 1)
-        pdf.ln(3)
-        
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(50, 6, "TOTAL:", 0, 0)
-        pdf.cell(0, 6, f"S/. {total_general:.2f}", 0, 1, 'R')
+        # Total general
+        total_general = sum(item['monto'] for item in self.data)
+        pdf.ln(2)
+        pdf.set_font("Arial", 'B', 14)
+        pdf.cell(page_width/2, 6, "TOTAL GENERAL:", 0, 0, 'L')
+        pdf.cell(page_width/2, 6, f"S/. {total_general:.2f}", 0, 1, 'R')
         
         pdf.output(self.output_path)
         logger.info(f"PDF YAPES generado: {self.output_path}")
