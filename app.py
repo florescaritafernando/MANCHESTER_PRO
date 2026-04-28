@@ -50,7 +50,9 @@ class YapesPDF:
             for line in lines[1:]:
                 if line.strip():
                     parts = line.strip().split(',')
-                    if len(parts) >= 2:
+                    # Limpiar comillas y espacios
+                    parts = [p.strip().strip('"').strip("'") for p in parts]
+                    if len(parts) >= 2 and parts[0] and parts[1]:
                         fecha_raw = parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
                         try:
                             fecha_dt = datetime.strptime(fecha_raw, '%d/%m/%Y')
@@ -59,13 +61,18 @@ class YapesPDF:
                             fecha = datetime.now().strftime('%d/%m/%Y')
                         
                         # Convertir coma a punto para decimales
-                        monto_str = parts[1].strip().replace(',', '.')
+                        monto_str = parts[1].replace(',', '.').strip()
                         
-                        self.data.append({
-                            'nombre': parts[0].strip().upper(),
-                            'monto': float(monto_str),
-                            'fecha': fecha
-                        })
+                        try:
+                            monto = float(monto_str)
+                            self.data.append({
+                                'nombre': parts[0].upper(),
+                                'monto': monto,
+                                'fecha': fecha
+                            })
+                        except ValueError:
+                            logger.warning(f"Monto inválido: {parts[1]}")
+                            continue
             
             return len(self.data) > 0
         except Exception as e:
