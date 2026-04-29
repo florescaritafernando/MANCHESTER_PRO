@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="IdSingEfact"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><ds:Reference URI=""><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>CdyVbUSQd+D3LpaDGPY15UlYriE=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>bjif2vEXXqHPltlXCumXzSfL+fgB2zATF27neJf6hUnVDcnDlH0/Ub2uRtB2A6UwYm6sIDwsL+vI&#13;
+Z+hig+RBXkW9XNnKuZPUYioMz1Pw1qtvHaCUG0qivzNgEcqj7zUsaHeQ+A1u7A8wvZHogYppkBIl&#13;
+YQALTpWCi/DHqy2vuZ1d46X0yOdmGGBj0Z31WGzZvtW/MH6h8e0whkFwo6NxWQClK7l7vKhAAD62&#13;
+ZOHlH+7whKpZnBlK8AeXa50uKqnwU5C3XCJUQjqhhBMeZ66omfIEktqd1yZuejz7BpCg8YTIjEXi&#13;
+KQUu41itV36rZ+tDH4E6MekM9/2C+p9MtaAZeg==</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIIF/zCCBOegAwIBAgITVXuntTUWr+ycc112dudpVO7r7jANBgkqhkiG9w0BAQsFADCBkjELMAkG&#13;
+A1UEBhMCQ0gxEDAOBgNVBAoTB1dJU2VLZXkxJjAkBgNVBAsTHUNvcHlyaWdodCAoYykgMjAxNiBX&#13;
+SVNlS2V5IFNBMRYwFAYDVQQLEw1JbnRlcm5hdGlvbmFsMTEwLwYDVQQDEyhXSVNlS2V5IENlcnRp&#13;
+ZnlJRCBBZHZhbmNlZCBTZXJ2aWNlcyBDQSA0MB4XDTI1MDkxNjE1MjcyNFoXDTI4MDkxNTE1Mjcy&#13;
+M1owggE7MQswCQYDVQQGEwJQRTENMAsGA1UEBwwETGltYTEVMBMGA1UECgwMRUZBQ1QgUy5BLkMu&#13;
+MSswKQYDVQQLDCJWYWxpZGF0ZWQgYnkgUGVydSBTZWN1cmUgRSBOZXQgU0FDMRgwFgYDVQQLDA9S&#13;
+VUMgMjA1NTEwOTMwMzUxHDAaBgNVBAsME1JFUFJFU0VOVEFOVEUgTEVHQUwxNTAzBgNVBAsMLE1J&#13;
+UklBTSBNQVJJQkVMIE9MQVlBIFJBTcONUkVaIC0gRE5JIDA5MTM0MTcyMTMwMQYDVQQLDCpDZXJ0&#13;
+aWZpY2FkbyBjb3Jwb3JhdGl2byBkZSByZXByZXNlbnRhY2nDs24xFTATBgNVBAMMDEVGQUNUIFMu&#13;
+QS5DLjEeMBwGCSqGSIb3DQEJARYPbW9sYXlhQGVmYWN0LnBlMIIBIjANBgkqhkiG9w0BAQEFAAOC&#13;
+AQ8AMIIBCgKCAQEAr4Em7LXJ8OySzxb9Mmtgor883wxGsGO7tt1BKYZuZ4qwchNbd7C2X9Y58+g6&#13;
+lMciRG1G7G2edazlGBGkNp9vfsbeMiObzDWLsz2ipplZhhq4xl5oNsYlWtl16qO7MdtW6rQaXvf8&#13;
+2UHueHAzbwwqcWdT8LkmkRKEWQWPayD/BSPbIiMHHk1UMOde1/S86G1ht7rxv9py+KcdTsISpqg0&#13;
+r8iAD4PET5shCls+zDBhono3osGaFEqsOyKLsypfC+w9dhACiw4UuuySNradCKGkL6i/CsPpgrg1&#13;
+jewr8snW5OBC1+bTFUoEBQNzS4K/FgacxQRdxPprNI9yic7IarnL4QIDAQABo4IBoDCCAZwwDAYD&#13;
+VR0TAQH/BAIwADAfBgNVHSMEGDAWgBT05JtX0q7CnohNALorr2XJY6mHmzBsBggrBgEFBQcBAQRg&#13;
+MF4wNwYIKwYBBQUHMAKGK2h0dHA6Ly9wdWJsaWMud2lzZWtleS5jb20vY3J0L3djaWRhc2NhNC5j&#13;
+cnQwIwYIKwYBBQUHMAGGF2h0dHA6Ly9vY3NwLndpc2VrZXkuY29tMBoGA1UdEQQTMBGBD21vbGF5&#13;
+YUBlZmFjdC5wZTBHBgNVHSAEQDA+MDwGCGCFdAUOBwQDMDAwLgYIKwYBBQUHAgEWImh0dHA6Ly93&#13;
+d3cud2lzZWtleS5jb20vcmVwb3NpdG9yeS8wPAYDVR0fBDUwMzAxoC+gLYYraHR0cDovL3B1Ymxp&#13;
+Yy53aXNla2V5LmNvbS9jcmwvd2NpZGFzY2E0LmNybDAdBgNVHQ4EFgQU7x7m/mPLQqUnoFYpPyo/&#13;
+St/tvXIwKwYDVR0lBCQwIgYIKwYBBQUHAwIGCisGAQQBgjcUAgIGCisGAQQBgjcKAwwwDgYDVR0P&#13;
+AQH/BAQDAgbAMA0GCSqGSIb3DQEBCwUAA4IBAQCqt2edLcj02fyouvq72BVYcKYJWopO2sGmHDBN&#13;
+J0KdU/TuH5rmLy0cnjD+Yb8nuzkAG6ftofb5fYOgyHsXGrCgWgNKJJiQ/wJ7iKVh5wc8sg+37+VB&#13;
+0DUZQPA/OxXgGsipp2lhlHueeeDwjp0/p4OTZHWqiE/WmmXMe7aRgFTTs1cbGRV56Gg+Sp3hP+lr&#13;
+pU9ysF9/cstvu2vJ87YHMSRdEYvzkNqRAjmtFNsFcGRuCJEIZ9xl8stSiXquiQjCETMDgq31ZMdc&#13;
+19G4+az2S5yWJCNaRnSMzpEqY3Hgpqh+zHsac5RNW+MkRkWDZvYMC8Dy5IeoBvTAodFPvSLjyxfo</ds:X509Certificate><ds:X509IssuerSerial><ds:X509IssuerName>1.2.840.113549.1.9.1=#160f6d6f6c6179614065666163742e7065,CN=EFACT S.A.C.,OU=Certificado corporativo de representación,OU=MIRIAM MARIBEL OLAYA RAMÍREZ - DNI 09134172,OU=REPRESENTANTE LEGAL,OU=RUC 20551093035,OU=Validated by Peru Secure E Net SAC,O=EFACT S.A.C.,L=Lima,C=PE</ds:X509IssuerName><ds:X509SerialNumber>1906335221065904395830907911209275094452857838</ds:X509SerialNumber></ds:X509IssuerSerial></ds:X509Data></ds:KeyInfo></ds:Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+   <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+   <cbc:CustomizationID schemeAgencyName="PE:SUNAT">2.0</cbc:CustomizationID>
+   <cbc:ID>F001-00004387</cbc:ID>
+   <cbc:IssueDate>2026-03-10</cbc:IssueDate>
+   <cbc:IssueTime>15:16:08</cbc:IssueTime>
+   <cbc:InvoiceTypeCode listAgencyName="PE:SUNAT" listID="0101" listName="Tipo de Documento" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" name="Tipo de Operacion">01</cbc:InvoiceTypeCode>
+   <cbc:Note languageLocaleID="1000">SETENTA Y OCHO Y 00/100 SOLES</cbc:Note>
+   <cbc:Note languageID="L">YAPE</cbc:Note>
+   <cbc:DocumentCurrencyCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 4217 Alpha" listName="Currency">PEN</cbc:DocumentCurrencyCode>
+   <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
+   <cac:DespatchDocumentReference>
+      <cbc:ID>0001-3321</cbc:ID>
+      <cbc:DocumentTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">09</cbc:DocumentTypeCode>
+   </cac:DespatchDocumentReference>
+   <cac:Signature>
+      <cbc:ID>IDSignature</cbc:ID>
+      <cac:SignatoryParty>
+         <cac:PartyIdentification>
+            <cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20608073486</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyName>
+            <cbc:Name>MANCHESTERTEX E.I.R.L.</cbc:Name>
+         </cac:PartyName>
+      </cac:SignatoryParty>
+      <cac:DigitalSignatureAttachment>
+         <cac:ExternalReference>
+            <cbc:URI>IDSignature</cbc:URI>
+         </cac:ExternalReference>
+      </cac:DigitalSignatureAttachment>
+   </cac:Signature>
+   <cac:AccountingSupplierParty>
+      <cac:Party>
+         <cac:PartyIdentification>
+            <cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20608073486</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyName>
+            <cbc:Name>MANCHESTERTEX E.I.R.L.</cbc:Name>
+         </cac:PartyName>
+         <cac:PartyLegalEntity>
+            <cbc:RegistrationName>MANCHESTERTEX E.I.R.L.</cbc:RegistrationName>
+            <cac:RegistrationAddress>
+               <cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">150115</cbc:ID>
+               <cbc:AddressTypeCode listAgencyName="PE:SUNAT" listName="Establecimientos anexos">0000</cbc:AddressTypeCode>
+               <cbc:CityName>LIMA</cbc:CityName>
+               <cbc:CountrySubentity>LIMA</cbc:CountrySubentity>
+               <cbc:District>LA VICTORIA</cbc:District>
+               <cac:AddressLine>
+                  <cbc:Line>JR. MARISCAL AGUSTIN GAMARRA NRO. 675 INT. 102 URB. EL PORVENIR </cbc:Line>
+               </cac:AddressLine>
+               <cac:Country>
+                  <cbc:IdentificationCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 3166-1" listName="Country">PE</cbc:IdentificationCode>
+               </cac:Country>
+            </cac:RegistrationAddress>
+         </cac:PartyLegalEntity>
+         <cac:Contact>
+            <cbc:ElectronicMail>manchestertexoficial@gmail.com</cbc:ElectronicMail>
+         </cac:Contact>
+      </cac:Party>
+   </cac:AccountingSupplierParty>
+   <cac:AccountingCustomerParty>
+      <cac:Party>
+         <cac:PartyIdentification>
+            <cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20611748605</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyLegalEntity>
+            <cbc:RegistrationName>CORPORACIÓN BALENCIAGAS E.I.R.L.</cbc:RegistrationName>
+            <cac:RegistrationAddress>
+               <cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">100101</cbc:ID>
+               <cbc:CityName>HUANUCO</cbc:CityName>
+               <cbc:CountrySubentity>HUANUCO</cbc:CountrySubentity>
+               <cbc:District>HUANUCO</cbc:District>
+               <cac:AddressLine>
+                  <cbc:Line>JR. GENERAL PRADO NRO. 565 ---- HUANUCO</cbc:Line>
+               </cac:AddressLine>
+               <cac:Country>
+                  <cbc:IdentificationCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 3166-1" listName="Country">PE</cbc:IdentificationCode>
+               </cac:Country>
+            </cac:RegistrationAddress>
+         </cac:PartyLegalEntity>
+         <cac:Contact>
+            <cbc:ElectronicMail>manchestertexoficial@gmail.com</cbc:ElectronicMail>
+         </cac:Contact>
+      </cac:Party>
+   </cac:AccountingCustomerParty>
+   <cac:PaymentTerms>
+      <cbc:ID>FormaPago</cbc:ID>
+      <cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>
+   </cac:PaymentTerms>
+   <cac:TaxTotal>
+      <cbc:TaxAmount currencyID="PEN">11.90</cbc:TaxAmount>
+      <cac:TaxSubtotal>
+         <cbc:TaxableAmount currencyID="PEN">66.10</cbc:TaxableAmount>
+         <cbc:TaxAmount currencyID="PEN">11.90</cbc:TaxAmount>
+         <cac:TaxCategory>
+            <cac:TaxScheme>
+               <cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Codigo de tributos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
+               <cbc:Name>IGV</cbc:Name>
+               <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+            </cac:TaxScheme>
+         </cac:TaxCategory>
+      </cac:TaxSubtotal>
+   </cac:TaxTotal>
+   <cac:LegalMonetaryTotal>
+      <cbc:LineExtensionAmount currencyID="PEN">66.10</cbc:LineExtensionAmount>
+      <cbc:TaxInclusiveAmount currencyID="PEN">78.00</cbc:TaxInclusiveAmount>
+      <cbc:AllowanceTotalAmount currencyID="PEN">0.00</cbc:AllowanceTotalAmount>
+      <cbc:PayableAmount currencyID="PEN">78.00</cbc:PayableAmount>
+   </cac:LegalMonetaryTotal>
+   <cac:InvoiceLine>
+      <cbc:ID>1</cbc:ID>
+      <cbc:Note>MTS</cbc:Note>
+      <cbc:InvoicedQuantity unitCode="ZZ" unitCodeListAgencyName="United Nations Economic Commission for Europe" unitCodeListID="UN/ECE rec 20">3.9</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="PEN">66.10</cbc:LineExtensionAmount>
+      <cac:PricingReference>
+         <cac:AlternativeConditionPrice>
+            <cbc:PriceAmount currencyID="PEN">20.0000</cbc:PriceAmount>
+            <cbc:PriceTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Precio" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+         </cac:AlternativeConditionPrice>
+      </cac:PricingReference>
+      <cac:TaxTotal>
+         <cbc:TaxAmount currencyID="PEN">11.90</cbc:TaxAmount>
+         <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="PEN">66.10</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="PEN">11.90</cbc:TaxAmount>
+            <cac:TaxCategory>
+               <cbc:Percent>18</cbc:Percent>
+               <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode>
+               <cac:TaxScheme>
+                  <cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Codigo de tributos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
+                  <cbc:Name>IGV</cbc:Name>
+                  <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+               </cac:TaxScheme>
+            </cac:TaxCategory>
+         </cac:TaxSubtotal>
+      </cac:TaxTotal>
+      <cac:Item>
+         <cbc:Description>TEJIDO MANCHESTER SUITING</cbc:Description>
+         <cac:SellersItemIdentification>
+            <cbc:ID>1</cbc:ID>
+         </cac:SellersItemIdentification>
+      </cac:Item>
+      <cac:Price>
+         <cbc:PriceAmount currencyID="PEN">16.949152</cbc:PriceAmount>
+      </cac:Price>
+   </cac:InvoiceLine>
+</Invoice>

@@ -657,7 +657,7 @@ class FacturaXMLtoPDF:
             pdf.set_xy(qr_x, qr_y + 12)
             pdf.cell(qr_width, 5, "QR", 0, 0, 'C')
         
-        pdf.set_font("Arial", 'B', 6)
+        pdf.set_font("Arial", 'B', 8)
         pdf.set_xy(qr_x, qr_y + qr_width)
         pdf.cell(qr_width, 4, "CATÁLOGO", 0, 0, 'C')
         
@@ -683,16 +683,16 @@ class FacturaXMLtoPDF:
         pdf.set_line_width(0.3)
         pdf.set_fill_color(255, 255, 255)
         
-        pdf.set_font("Arial", 'B', 9)
+        pdf.set_font("Arial", 'B', 12)
         
         pdf.cell(info_width, 7.5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
         
         pdf.set_x(info_x)
-        pdf.set_font("Arial", 'B', 9)
+        pdf.set_font("Arial", 'B', 12)
         pdf.cell(info_width, 7.5, f"GUÍA DE REMISIÓN: N° {guia_remision}", 1, 1, 'C', True)
         
         pdf.set_x(info_x)
-        pdf.set_font("Arial", 'B', 9)
+        pdf.set_font("Arial", 'B', 12)
         pdf.cell(info_width, 7.5, f"FECHA DE EMISIÓN: {fecha_formateada}", 1, 1, 'C', True)
         
         
@@ -760,9 +760,7 @@ class FacturaXMLtoPDF:
             pdf.cell(0, 4, emisor_nombre, 0, 1, 'C')
         
         pdf.set_font("Arial", '', 10)
-        
         pdf.cell(0, 4, f"RUC: {self.data.get('emisor_ruc', 'N/A')}", 0, 1, 'C')
-        
         
         # Dirección emisor
         emisor_dir = self.data.get('emisor_direccion', '')
