@@ -1489,13 +1489,13 @@ HTML_TEMPLATE = """
                     
                     <div class="form-group" id="recojeDatosGroup" style="display: none;">
                         <label for="recoje_dni">DNI:</label>
-                        <input type="text" name="recoje_dni" id="recoje_dni" placeholder="Solo números (máx 8)" maxlength="8" pattern="[0-9]{8}" value="{{ selected_recoje_dni or '' }}">
+                        <input type="text" name="recoje_dni" id="recoje_dni" maxlength="8" pattern="[0-9]{8}" value="{{ selected_recoje_dni or '' }}">
                         
                         <label for="recoje_nombre">Nombres y Apellidos:</label>
-                        <input type="text" name="recoje_nombre" id="recoje_nombre" placeholder="Solo letras (max 50)" maxlength="50" value="{{ selected_recoje_nombre or '' }}">
+                        <input type="text" name="recoje_nombre" id="recoje_nombre" maxlength="80" value="{{ selected_recoje_nombre or '' }}">
                         
                         <label for="recoje_direccion">Dirección:</label>
-                        <input type="text" name="recoje_direccion" id="recoje_direccion" placeholder="Solo letras (máx 50)" maxlength="50" value="{{ selected_recoje_direccion or '' }}">
+                        <input type="text" name="recoje_direccion" id="recoje_direccion" maxlength="100" value="{{ selected_recoje_direccion or '' }}">
                     </div>
                     
                     <div class="form-group" id="agenciaGroup" style="display: none;">
@@ -1515,12 +1515,12 @@ HTML_TEMPLATE = """
                     
                     <div class="form-group" id="otraAgenciaGroup" style="display: none;">
                         <label for="otra_agencia">Especifique agencia:</label>
-                        <textarea name="otra_agencia" id="otra_agencia" placeholder="Nombre de agencia" maxlength="50" rows="1">{{ selected_otra_agencia or '' }}</textarea>
+                        <textarea name="otra_agencia" id="otra_agencia" maxlength="60" rows="1">{{ selected_otra_agencia or '' }}</textarea>
                     </div>
                     
                     <div class="form-group" id="notasGroup" style="display: none;">
                         <label for="other_notes">Otras indicaciones:</label>
-                        <textarea name="other_notes" id="other_notes" placeholder="Máx 100 caracteres" maxlength="100" rows="2">{{ selected_notes or '' }}</textarea>
+                        <textarea name="other_notes" id="other_notes" maxlength="120" rows="2">{{ selected_notes or '' }}</textarea>
                     </div>
                     
                     <button type="submit" class="btn btn-convert" id="convertirBtn">Convertir a PDF</button>
