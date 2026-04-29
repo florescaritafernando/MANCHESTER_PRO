@@ -1701,10 +1701,14 @@ def convertir():
             if not filename.endswith('.xml'):
                 return render_template_string(HTML_TEMPLATE, error="El archivo debe ser de tipo XML (.xml)")
             
-            # Ya tenemos el xml_path guardado en sesión, usarlo
-            xml_path = session.get('xml_file_path')
+            # Usar el xml_path local
+            if not xml_path:
+                xml_path = session.get('xml_file_path', '')
+            
+            logger.info(f"Procesando XML: xml_path={xml_path}, existe={os.path.exists(xml_path) if xml_path else False}")
             
             pdf_temp_id = uuid.uuid4().hex
+            os.makedirs('temp_files', exist_ok=True)
             output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
             
             extra_data = {}
@@ -1725,8 +1729,7 @@ def convertir():
                 return render_template_string(HTML_TEMPLATE, error=f"{error_msg}")
                         
             factura.generate_pdf(formato)
-
-            # Nombre del archivo PDF: NUMERO_NOMBRE_CLIENTE_TIPO_FORMATO.pdf
+            logger.info(f"PDF generado exitosamente: {output_path}, existe={os.path.exists(output_path)}")
             numero = factura.data.get('numero_factura', 'documento')
             cliente_nombre = factura.data.get('cliente_nombre', 'cliente').replace(' ', '_')
             cliente_nombre = ''.join(c for c in cliente_nombre if c.isalnum() or c == '_')
