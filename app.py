@@ -1566,11 +1566,15 @@ def index():
     return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name, selected_formato=selected_formato, selected_agencia=selected_agencia, selected_otra_agencia=selected_otra_agencia, selected_notes=selected_notes, selected_recoje=selected_recoje, selected_recoje_dni=selected_recoje_dni, selected_recoje_nombre=selected_recoje_nombre, selected_recoje_direccion=selected_recoje_direccion)
 
 
-@app.route('/convertir', methods=['POST'])
+@app.route('/convertir', methods=['GET', 'POST'])
 @log_request
 def convertir():
     """Endpoint para convertir XML/CSV a PDF"""
     try:
+        # Si es GET, redirigir al home
+        if request.method == 'GET':
+            return redirect(url_for('index'))
+        
         # Obtener datos del formulario
         xml_file = request.files.get('xml_file')
         formato = request.form.get('formato', CONFIG['DEFAULT_FORMAT'])
