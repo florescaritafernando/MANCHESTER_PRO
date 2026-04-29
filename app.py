@@ -1586,8 +1586,11 @@ def convertir():
             # Guardar contenido en sesión (para Render - archivos efímeros)
             session['xml_file_data'] = xml_data
             session['xml_file_name'] = xml_file.filename
+            session.modified = True
+            logger.info(f"Guardando XML en sesión: {len(xml_data)} bytes")
             
             # También guardar en archivo temporal para desarrollo local
+            os.makedirs('temp_files', exist_ok=True)
             xml_temp_id = uuid_module.uuid4().hex
             xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
             with open(xml_path, 'wb') as f:
@@ -1709,9 +1712,10 @@ def convertir():
         session['selected_recoje_dni'] = recoje_dni if formato == 'shipping_label' else ''
         session['selected_recoje_nombre'] = recoje_nombre if formato == 'shipping_label' else ''
         session['selected_recoje_direccion'] = recoje_direccion if formato == 'shipping_label' else ''
+        session.modified = True
         
         # Retornar con vista previa
-        logger.info(f"PDF generado: temp_id={temp_id}")
+        logger.info(f"PDF generado: temp_id={temp_id}, xml_data en sesion: {session.get('xml_file_data') is not None}")
         return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
         
     except Exception as e:
@@ -1731,6 +1735,8 @@ def view_pdf(temp_id):
     try:
         # Obtener datos necesarios de sesión
         xml_data = session.get('xml_file_data')
+        logger.info(f"view_pdf: xml_data existe: {xml_data is not None}, temp_id: {temp_id}")
+        
         if not xml_data:
             return "Archivo XML no encontrado. Por favor, sube el archivo nuevamente.", 404
         
@@ -1748,10 +1754,13 @@ def view_pdf(temp_id):
         agency_name = otra_agencia if agencia == 'OTRA' else agencia
         
         # Guardar XML temporalmente para generar PDF
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
+        os.makedirs('temp_files', exist_ok=True)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir='temp_files') as tmp_xml:
             tmp_xml.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
             xml_path = tmp_xml.name
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
+        
+        os.makedirs('temp_files', exist_ok=True)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir='temp_files') as tmp_pdf:
             output_path = tmp_pdf.name
         
         extra_data = {}
@@ -1814,7 +1823,8 @@ def download_pdf():
         agency_name = otra_agencia if agencia == 'OTRA' else agencia
         
         # Generar PDF temporal
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
+        os.makedirs('temp_files', exist_ok=True)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir='temp_files') as tmp_pdf:
             output_path = tmp_pdf.name
         
         extra_data = {}
