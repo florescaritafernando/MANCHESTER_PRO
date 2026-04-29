@@ -37,9 +37,15 @@ if redis_url:
         logger.info(f"Redis configurado correctamente: {redis_url[:20]}...")
     except Exception as e:
         logger.error(f"Error configurando Redis: {e}")
-        # Fall back to default session
+        app.config['SESSION_TYPE'] = 'filesystem'
 else:
-    logger.info("Redis no configurado (REDIS_URL no encontrada), usando sesión por defecto")
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = 'temp_sessions'
+    logger.info("Redis no configurado, usando sesión por defecto (filesystem)")
+
+# Crear directorio de sesiones si es filesystem
+if app.config.get('SESSION_TYPE') == 'filesystem':
+    os.makedirs('temp_sessions', exist_ok=True)
 
 # Inicializar Flask-Session
 Session(app)
