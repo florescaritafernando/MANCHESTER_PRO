@@ -29,7 +29,7 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=3600  # 1 hora
-)
+) 
 
 # Configuración de la app
 CONFIG = {
