@@ -1736,8 +1736,9 @@ def convertir():
         session.modified = True
         
         # Retornar con vista previa
-        logger.info(f"PDF generado: temp_id={temp_id}, xml_data en sesion: {session.get('xml_file_data') is not None}")
-        return render_template_string(HTML_TEMPLATE, pdf_url=url_for('view_pdf', temp_id=temp_id), info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
+        pdf_url = url_for('view_pdf', temp_id=temp_id)
+        logger.info(f"PDF generado: temp_id={temp_id}, url={pdf_url}, xml_data={session.get('xml_file_data') is not None}")
+        return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
         
     except Exception as e:
         logger.exception("Error en conversión")
@@ -1758,18 +1759,25 @@ def view_pdf(temp_id):
         xml_path = session.get('xml_file_path')
         xml_data = session.get('xml_file_data')
         
-        logger.info(f"view_pdf: xml_path={xml_path}, xml_data={xml_data is not None}")
+        logger.info(f"view_pdf llamado: temp_id={temp_id}, xml_path={xml_path}, xml_data_existe={xml_data is not None}")
+        logger.info(f"current_pdf en sesion: {session.get('current_pdf')}")
         
         # Si no hay datos, error
         if not xml_data and (not xml_path or not os.path.exists(xml_path)):
+            logger.warning("Archivo XML no encontrado - xml_data y xml_path no existen")
             return "Archivo XML no encontrado. Por favor, sube el archivo nuevamente.", 404
         
         # Si hay datos en sesión pero no archivo, crear archivo temporal
         if xml_data and (not xml_path or not os.path.exists(xml_path)):
+            logger.info("Creando archivo temporal desde xml_data de sesion")
             os.makedirs('temp_files', exist_ok=True)
             import uuid as uuid_module
             xml_temp_id = uuid_module.uuid4().hex
             xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+            session['xml_file_path'] = xml_path
+            session.modified = True
             with open(xml_path, 'wb') as f:
                 f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
             session['xml_file_path'] = xml_path
