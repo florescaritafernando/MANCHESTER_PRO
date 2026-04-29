@@ -21,7 +21,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'manchester_pro_secret_key_2024'
+app.secret_key = os.environ.get('SECRET_KEY', 'manchester_pro_secret_key_2024')
+
+# Configurar sesión para producción
+app.config.update(
+    SESSION_COOKIE_SECURE=False,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=3600  # 1 hora
+)
 
 # Configuración de la app
 CONFIG = {
@@ -1584,18 +1592,28 @@ def convertir():
             xml_data = xml_file.read()
             filename = xml_file.filename.lower()
             
-            # Guardar en archivo temporal
+            # Guardar en sesión (para Render con archivos efímeros)
+            session['xml_file_data'] = xml_data
+            session['xml_file_name'] = xml_file.filename
+            session['selected_formato'] = formato
+            
+            # Guardar también en archivo (para desarrollo local)
             os.makedirs('temp_files', exist_ok=True)
             xml_temp_id = uuid_module.uuid4().hex
             xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
             with open(xml_path, 'wb') as f:
                 f.write(xml_data)
             session['xml_file_path'] = xml_path
-            session['xml_file_name'] = xml_file.filename
+            
             session.modified = True
             logger.info(f"Guardando XML en: {xml_path}")
+        elif session.get('xml_file_data'):
+            # Usar datos de sesión (prioridad para Render)
+            xml_data = session.get('xml_file_data')
+            filename = session.get('xml_file_name', '').lower()
+            xml_path = session.get('xml_file_path', '')
         elif session.get('xml_file_path') and os.path.exists(session.get('xml_file_path')):
-            # Usar archivo existente
+            # Usar archivo existente (para desarrollo local)
             xml_path = session.get('xml_file_path')
             filename = session.get('xml_file_name', '').lower()
             with open(xml_path, 'rb') as f:
@@ -1732,12 +1750,26 @@ def health():
 def view_pdf(temp_id):
     """Servir PDF generado - regenera bajo demanda"""
     try:
-        # Obtener datos necesarios de sesión
+        # Obtener datos de sesión - primero intentar archivo, luego datos
         xml_path = session.get('xml_file_path')
-        logger.info(f"view_pdf: xml_path={xml_path}, existe={os.path.exists(xml_path) if xml_path else False}")
+        xml_data = session.get('xml_file_data')
         
-        if not xml_path or not os.path.exists(xml_path):
+        logger.info(f"view_pdf: xml_path={xml_path}, xml_data={xml_data is not None}")
+        
+        # Si no hay datos, error
+        if not xml_data and (not xml_path or not os.path.exists(xml_path)):
             return "Archivo XML no encontrado. Por favor, sube el archivo nuevamente.", 404
+        
+        # Si hay datos en sesión pero no archivo, crear archivo temporal
+        if xml_data and (not xml_path or not os.path.exists(xml_path)):
+            os.makedirs('temp_files', exist_ok=True)
+            import uuid as uuid_module
+            xml_temp_id = uuid_module.uuid4().hex
+            xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+            session['xml_file_path'] = xml_path
+            session.modified = True
         
         pdf_name = session.get('pdf_name', 'documento.pdf')
         formato = session.get('selected_formato', 'ticket')
@@ -1793,10 +1825,22 @@ def download_pdf():
         if not temp_id:
             return "PDF no encontrado", 404
         
-        # Obtener datos de sesión
+        # Obtener datos de sesión - primero intentar archivo, luego datos
         xml_path = session.get('xml_file_path')
-        if not xml_path or not os.path.exists(xml_path):
+        xml_data = session.get('xml_file_data')
+        
+        if not xml_data and (not xml_path or not os.path.exists(xml_path)):
             return "Archivo no encontrado. Por favor, sube el archivo nuevamente.", 404
+        
+        # Si hay datos en sesión pero no archivo, crear archivo temporal
+        if xml_data and (not xml_path or not os.path.exists(xml_path)):
+            os.makedirs('temp_files', exist_ok=True)
+            import uuid as uuid_module
+            xml_temp_id = uuid_module.uuid4().hex
+            xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+            session['xml_file_path'] = xml_path
         
         pdf_name = session.get('pdf_name', 'documento.pdf')
         formato = session.get('selected_formato', 'ticket')
