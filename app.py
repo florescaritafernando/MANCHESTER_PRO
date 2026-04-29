@@ -27,15 +27,19 @@ app.secret_key = os.environ.get('SECRET_KEY', 'manchester_pro_secret_key_2024')
 # Configurar sesión con Redis para producción
 redis_url = os.environ.get('REDIS_URL', None)
 if redis_url:
-    import redis
-    app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_PERMANENT'] = False
-    app.config['SESSION_USE_SIGNER'] = True
-    app.config['SESSION_KEY_PREFIX'] = 'manchester:'
-    app.config['SESSION_REDIS'] = redis.from_url(redis_url)
-    logger.info("Sesión configurada con Redis")
+    try:
+        import redis
+        app.config['SESSION_TYPE'] = 'redis'
+        app.config['SESSION_PERMANENT'] = False
+        app.config['SESSION_USE_SIGNER'] = True
+        app.config['SESSION_KEY_PREFIX'] = 'manchester:'
+        app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+        logger.info(f"Redis configurado correctamente: {redis_url[:20]}...")
+    except Exception as e:
+        logger.error(f"Error configurando Redis: {e}")
+        # Fall back to default session
 else:
-    logger.info("Redis no configurado, usando sesión por defecto")
+    logger.info("Redis no configurado (REDIS_URL no encontrada), usando sesión por defecto")
 
 # Inicializar Flask-Session
 Session(app)
@@ -1618,7 +1622,10 @@ def convertir():
             session['xml_file_name'] = xml_file.filename
             session['selected_formato'] = formato
             session.modified = True
-            logger.info(f"Guardando XML en sesión: {len(xml_data)} bytes")
+            
+            # Verificar que se guardó
+            saved_data = session.get('xml_file_data')
+            logger.info(f"Guardando XML en sesión: {len(xml_data)} bytes, verificado: {len(saved_data) if saved_data else 0} bytes")
             
             # También guardar en archivo para proceso actual
             os.makedirs('temp_files', exist_ok=True)
