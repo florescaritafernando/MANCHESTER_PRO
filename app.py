@@ -1583,24 +1583,23 @@ def convertir():
             import uuid as uuid_module
             xml_data = xml_file.read()
             filename = xml_file.filename.lower()
-            # Guardar contenido en sesión (para Render - archivos efímeros)
-            session['xml_file_data'] = xml_data
-            session['xml_file_name'] = xml_file.filename
-            session.modified = True
-            logger.info(f"Guardando XML en sesión: {len(xml_data)} bytes")
             
-            # También guardar en archivo temporal para desarrollo local
+            # Guardar en archivo temporal
             os.makedirs('temp_files', exist_ok=True)
             xml_temp_id = uuid_module.uuid4().hex
             xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
             with open(xml_path, 'wb') as f:
                 f.write(xml_data)
             session['xml_file_path'] = xml_path
-        elif session.get('xml_file_data'):
-            # Usar archivo de sesión (desde memoria)
-            xml_data = session.get('xml_file_data')
+            session['xml_file_name'] = xml_file.filename
+            session.modified = True
+            logger.info(f"Guardando XML en: {xml_path}")
+        elif session.get('xml_file_path') and os.path.exists(session.get('xml_file_path')):
+            # Usar archivo existente
+            xml_path = session.get('xml_file_path')
             filename = session.get('xml_file_name', '').lower()
-            xml_path = session.get('xml_file_path', '')
+            with open(xml_path, 'rb') as f:
+                xml_data = f.read()
         else:
             xml_data = None
             filename = ''
@@ -1734,10 +1733,10 @@ def view_pdf(temp_id):
     """Servir PDF generado - regenera bajo demanda"""
     try:
         # Obtener datos necesarios de sesión
-        xml_data = session.get('xml_file_data')
-        logger.info(f"view_pdf: xml_data existe: {xml_data is not None}, temp_id: {temp_id}")
+        xml_path = session.get('xml_file_path')
+        logger.info(f"view_pdf: xml_path={xml_path}, existe={os.path.exists(xml_path) if xml_path else False}")
         
-        if not xml_data:
+        if not xml_path or not os.path.exists(xml_path):
             return "Archivo XML no encontrado. Por favor, sube el archivo nuevamente.", 404
         
         pdf_name = session.get('pdf_name', 'documento.pdf')
@@ -1753,12 +1752,7 @@ def view_pdf(temp_id):
         # Construir agency_name
         agency_name = otra_agencia if agencia == 'OTRA' else agencia
         
-        # Guardar XML temporalmente para generar PDF
-        os.makedirs('temp_files', exist_ok=True)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', dir='temp_files') as tmp_xml:
-            tmp_xml.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
-            xml_path = tmp_xml.name
-        
+        # Generar PDF temporal
         os.makedirs('temp_files', exist_ok=True)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir='temp_files') as tmp_pdf:
             output_path = tmp_pdf.name
@@ -1774,9 +1768,8 @@ def view_pdf(temp_id):
                 'recoje_direccion': recoje_direccion.upper() if recoje_direccion else ''
             }
         
-        # Generar el PDF
+        # Generar el PDF usando el xml_path guardado
         if formato == 'yapes':
-            # Para YAPES, devolver error si no hay CSV
             return "Formato YAPES necesita ser regenerado. Por favor, convierte nuevamente.", 404
         else:
             factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
@@ -1801,14 +1794,9 @@ def download_pdf():
             return "PDF no encontrado", 404
         
         # Obtener datos de sesión
-        xml_data = session.get('xml_file_data')
-        if not xml_data:
+        xml_path = session.get('xml_file_path')
+        if not xml_path or not os.path.exists(xml_path):
             return "Archivo no encontrado. Por favor, sube el archivo nuevamente.", 404
-        
-        # Guardar XML temporalmente
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml') as tmp_xml:
-            tmp_xml.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
-            xml_path = tmp_xml.name
         
         pdf_name = session.get('pdf_name', 'documento.pdf')
         formato = session.get('selected_formato', 'ticket')
