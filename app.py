@@ -70,10 +70,74 @@ CONFIG = {
 class YapesPDF:
     """Clase para generar PDF de YAPES"""
     
-    def __init__(self, csv_path: str, output_path: str):
+    def __init__(self, csv_path: str, output_path: str, fecha_inicio: str = '', fecha_fin: str = ''):
         self.csv_path = csv_path
         self.output_path = output_path
         self.data = []
+        self.rango_fechas_yape = ""
+        self.fecha_inicio = fecha_inicio
+        self.fecha_fin = fecha_fin
+        logger.info(f"YapesPDF INIT: fecha_inicio={fecha_inicio}, fecha_fin={fecha_fin}")
+        
+    def _limpiar_texto(self, texto: str) -> str:
+        """Limpiar texto: quitar espacios extra, comillas, etc."""
+        if not texto:
+            return ""
+        texto = texto.strip()
+        texto = texto.strip('"').strip("'").strip()
+        import re
+        texto = re.sub(r'\s+', ' ', texto)
+        return texto
+    
+    def _normalizar_nombre(self, nombre: str) -> str:
+        """Normalizar nombre para agrupar: mayúsculas, sin tildes, sin acentos"""
+        import unicodedata
+        nombre = nombre.upper().strip()
+        # Eliminar tildes/acentos
+        nombre_normalizado = unicodedata.normalize('NFD', nombre)
+        nombre_normalizado = ''.join(c for c in nombre_normalizado if unicodedata.category(c) != 'Mn')
+        return nombre_normalizado
+    
+    def _parsear_fecha(self, fecha_raw: str) -> tuple:
+        """Parsear fecha, separar fecha y hora si existe"""
+        fecha_raw = self._limpiar_texto(fecha_raw)
+        
+        if not fecha_raw:
+            fecha = datetime.now().strftime('%d/%m/%Y')
+            hora = ""
+            return fecha, hora
+        
+        # Intentar diferentes formatos (año 2 dígitos y 4 dígitos)
+        formatos = [
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d %H:%M',
+            '%Y-%m-%d',
+            '%d/%m/%Y %H:%M:%S',
+            '%d/%m/%Y %H:%M',
+            '%d/%m/%Y',
+            '%d/%m/%y',  # Año 2 dígitos
+            '%d-%m-%y',
+        ]
+        
+        fecha = ""
+        hora = ""
+        
+        for fmt in formatos:
+            try:
+                dt = datetime.strptime(fecha_raw, fmt)
+                # Convertir a DD/MM/YYYY para consistencia
+                fecha = dt.strftime('%d/%m/%Y')
+                if dt.hour > 0 or dt.minute > 0 or dt.second > 0:
+                    hora = dt.strftime('%H:%M')
+                break
+            except:
+                continue
+        
+        if not fecha:
+            logger.warning(f"No se pudo parsear fecha: {fecha_raw}")
+            fecha = datetime.now().strftime('%d/%m/%Y')
+        
+        return fecha, hora
         
     def parse_csv(self) -> bool:
         """Parsear archivo CSV"""
@@ -81,55 +145,84 @@ class YapesPDF:
             with open(self.csv_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
+            logger.info(f"CSV leído: total líneas={len(lines)}, primera={lines[1][:50] if len(lines) > 1 else 'N/A'}, tamaño_archivo={os.path.getsize(self.csv_path) if os.path.exists(self.csv_path) else 'N/A'} bytes")
+            
             if len(lines) < 2:
                 return False
             
-            for line in lines[1:]:
-                if line.strip():
-                    # Separar por coma, manejar comas dentro de valores con comillas
-                    import re
-                    parts = []
-                    in_quote = False
-                    current = ""
-                    for char in line.strip():
-                        if char == '"':
-                            in_quote = not in_quote
-                        elif char == ',' and not in_quote:
-                            parts.append(current)
-                            current = ""
-                        else:
-                            current += char
-                    parts.append(current)
-                    
-                    # Limpiar comillas y espacios
-                    parts = [p.strip().strip('"').strip("'") for p in parts]
-                    
-                    if len(parts) >= 2 and parts[0] and parts[1]:
-                        # Parsear monto manteniendo decimales
-                        monto_str = parts[1].strip()
-                        # Reemplazar coma por punto
-                        monto_str = monto_str.replace(',', '.')
-                        
-                        try:
-                            monto = float(monto_str)
-                        except ValueError:
-                            logger.warning(f"Monto inválido: {parts[1]}, usando 0")
-                            monto = 0.0
-                        
-                        # Parsear fecha
-                        fecha_raw = parts[2].strip() if len(parts) > 2 else datetime.now().strftime('%d/%m/%Y')
-                        try:
-                            fecha_dt = datetime.strptime(fecha_raw, '%d/%m/%Y')
-                            fecha = fecha_dt.strftime('%d/%m/%Y')
-                        except:
-                            fecha = datetime.now().strftime('%d/%m/%Y')
-                        
-                        self.data.append({
-                            'nombre': parts[0].upper(),
-                            'monto': monto,
-                            'fecha': fecha
-                        })
+            lineas_procesadas = 0
+            datos_anadidos = 0
             
+            for line in lines[1:]:
+                lineas_procesadas += 1
+                if not line.strip():
+                    continue
+                
+                # Separar por coma, manejar comillas dentro de valores
+                import re
+                parts = []
+                in_quote = False
+                current = ""
+                for char in line.strip():
+                    if char == '"':
+                        in_quote = not in_quote
+                    elif char == ',' and not in_quote:
+                        parts.append(current)
+                        current = ""
+                    else:
+                        current += char
+                parts.append(current)
+                
+                # Limpiar comillas y espacios
+                parts = [self._limpiar_texto(p) for p in parts]
+                logger.info(f"Línea {lineas_procesadas}: {len(parts)} partes, parts={parts[:3]}")
+                
+                if len(parts) >= 2 and parts[0] and parts[1]:
+                    # Parsear monto manteniendo decimales
+                    monto_str = parts[1].strip()
+                    monto_str = monto_str.replace(',', '.')
+                    monto_str = re.sub(r'[^\d.]', '', monto_str)
+                    
+                    try:
+                        monto = float(monto_str)
+                    except ValueError:
+                        logger.warning(f"Monto inválido: {parts[1]}, usando 0")
+                        monto = 0.0
+                    
+                    # Parsear fecha y hora
+                    fecha_raw = parts[2].strip() if len(parts) > 2 else ""
+                    fecha, hora = self._parsear_fecha(fecha_raw)
+                    
+                    # Filtrar por rango de fechas si se especificó
+                    if self.fecha_inicio or self.fecha_fin:
+                        try:
+                            item_date = datetime.strptime(fecha, '%d/%m/%Y')
+                            if self.fecha_inicio:
+                                inicio = datetime.strptime(self.fecha_inicio, '%Y-%m-%d')
+                                if item_date < inicio:
+                                    continue
+                            if self.fecha_fin:
+                                fin = datetime.strptime(self.fecha_fin, '%Y-%m-%d')
+                                if item_date > fin:
+                                    continue
+                        except Exception as e:
+                            logger.warning(f"Error filtrando fecha '{fecha}': {e}")
+                            pass
+                    
+                    nombre_original = parts[0].upper()
+                    nombre_normalizado = self._normalizar_nombre(nombre_original)
+                    
+                    self.data.append({
+                        'nombre': nombre_original,
+                        'nombre_key': nombre_normalizado,
+                        'monto': monto,
+                        'fecha': fecha,
+                        'hora': hora
+                    })
+                    datos_anadidos += 1
+                    logger.info(f"Datos añadidos: {datos_anadidos}, total: {len(self.data)}")
+            
+            logger.info(f"CSV parseado: líneas={lineas_procesadas}, añadidos={datos_anadidos}, data={len(self.data)}")
             return len(self.data) > 0
         except Exception as e:
             logger.error(f"Error parseando CSV: {e}")
@@ -139,112 +232,164 @@ class YapesPDF:
         """Generar PDF de YAPES"""
         from collections import defaultdict
         
-        # Agrupar por fecha y nombre (manteniendo todos los montos)
-        agrupado = defaultdict(lambda: defaultdict(list))
+        if not self.data:
+            logger.warning("No hay datos para generar PDF")
+            return
+        
+        agrupado = defaultdict(list)
         for item in self.data:
-            agrupado[item['fecha']][item['nombre']].append(item['monto'])
+            agrupado[item['nombre_key']].append({
+                'nombre': item['nombre'],
+                'monto': item['monto'],
+                'fecha': item['fecha'],
+                'hora': item.get('hora', '')
+            })
         
-        # Obtener todas las fechas
-        fechas = sorted(agrupado.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+        # Ordenar por nombre normalizado pero guardar nombre original
+        nombres = sorted(agrupado.keys())
         
-        # Ancho de página
+        # Calcular rango de fechas global - usar fechas seleccionadas si existen
+        if self.fecha_inicio or self.fecha_fin:
+            # Convertir formato YYYY-MM-DD a DD/MM/YYYY para mostrar
+            inicio_display = datetime.strptime(self.fecha_inicio, '%Y-%m-%d').strftime('%d/%m/%Y') if self.fecha_inicio else ''
+            fin_display = datetime.strptime(self.fecha_fin, '%Y-%m-%d').strftime('%d/%m/%Y') if self.fecha_fin else ''
+            if inicio_display and fin_display:
+                self.rango_fechas_yape = f"{inicio_display} - {fin_display}"
+            elif inicio_display:
+                self.rango_fechas_yape = f"{inicio_display} - *"
+            else:
+                self.rango_fechas_yape = f"* - {fin_display}"
+        elif self.data:
+            todas_fechas = [item['fecha'] for item in self.data]
+            todas_fechas_parsed = sorted(todas_fechas, key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+            self.rango_fechas_yape = f"{todas_fechas_parsed[0]} - {todas_fechas_parsed[-1]}"
+        else:
+            self.rango_fechas_yape = datetime.now().strftime('%d/%m/%Y')
+        
         page_width = 80
-        pdf = FPDF(orientation='P', unit='mm', format=(page_width, 200))
-        pdf.set_margins(0, 0, 0)
+        pdf = FPDF(orientation='P', unit='mm', format=(page_width, 300))
+        pdf.set_margins(2, 2, 2)
         pdf.set_auto_page_break(auto=True, margin=3)
         pdf.add_page()
         
-        # Encabezado
-        pdf.set_font("Arial", 'B', 12)
+        pdf.set_font("Arial", 'B', 11)
         pdf.cell(0, 5, "RESUMEN YAPES RECIBIDOS", 0, 1, 'C')
         
-        pdf.ln(1)
+        pdf.ln(2)
+        pdf.set_font("Arial", '', 9)
         pdf.cell(0, 1, "", "T", 1)
+        pdf.ln(2)
         
-        # Por cada fecha
-        for fecha in fechas:
-            pdf.set_font("Arial", 'B', 10)
-            pdf.cell(0, 5, f"Fecha: {fecha}", 0, 1, 'L')
+        for nombre in nombres:
+            transacciones = agrupado[nombre]
+            
+            # Ordenar por fecha y hora ascendente
+            transacciones_ordenadas = sorted(
+                transacciones,
+                key=lambda x: (x['fecha'], x['hora'] if x['hora'] else 'zz')
+            )
+            
+            # Mostrar nombre original (primero encontrado)
+            nombre_original = transacciones_ordenadas[0]['nombre'] if transacciones_ordenadas else nombre
+            
+            # Usar rango del input del usuario
+            if self.fecha_inicio and self.fecha_fin:
+                inicio_fmt = datetime.strptime(self.fecha_inicio, '%Y-%m-%d').strftime('%d/%m/%Y')
+                fin_fmt = datetime.strptime(self.fecha_fin, '%Y-%m-%d').strftime('%d/%m/%Y')
+                rango = f"{inicio_fmt} - {fin_fmt}"
+            else:
+                # Calcular de registros reales
+                fechas_items = [t['fecha'] for t in transacciones]
+                if fechas_items:
+                    fechas_parsed = sorted(fechas_items, key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+                    rango = f"{fechas_parsed[0]} - {fechas_parsed[-1]}"
+                else:
+                    rango = "Sin registros"
+            
+            # Lista de montos
+            count = len(transacciones_ordenadas)
+
+            # PARA:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 4, f"PARA: {nombre_original}", 0, 1, 'C')
+            
+            # RANGO DE FECHA:
+            pdf.set_font("Arial", '', 12)
+            pdf.cell(0, 4, rango, 0, 1, 'C')
+
+            # CANTIDAD REGISTROS:
+            pdf.set_font("Arial", '', 10)
+            pdf.cell(0, 4, f"N° DE YAPES: {count}", 0, 1, 'C')
+
+            
+            pdf.ln(1)
+            pdf.set_font("Arial", '', 12)
+            pdf.cell(0, 1, "", "T", 1)
             pdf.ln(2)
             
-            nombres = sorted(agrupado[fecha].keys())
-            col_width = page_width / 2
-            
-            if len(nombres) == 1:
-                # Una sola columna
-                nombre = nombres[0]
-                montos = agrupado[fecha][nombre]
+            if count > 26:
+                # 3 columnas
+                col_width = page_width / 3
+                parts = []
+                for i in range(3):
+                    start = i * ((count + 2) // 3)
+                    end = min((i + 1) * ((count + 2) // 3), count)
+                    parts.append(transacciones_ordenadas[start:end])
                 
-                pdf.set_font("Arial", 'B', 20)
-                pdf.cell(0, 4, f"{nombre}", 0, 1, 'L')
-                pdf.ln(4)
+                y_start = pdf.get_y()
+                heights = [0, 0, 0]
                 
-                pdf.set_font("Arial", '', 15)
-                for monto in montos:
-                    pdf.cell(3, 5, "-", 0, 0, 'L')
-                    pdf.cell(10, 5, "S/.", 0, 0, 'L')
-                    pdf.cell(0, 5, f"{monto:.2f}", 0, 1, 'R')
-                    pdf.ln(1)
-
-                # Total individual por nombre
-                pdf.ln(2)
-                total_nombre = sum(montos)
-                pdf.set_font("Arial", 'B', 20)
-                pdf.cell(0, 5, f"TOTAL: S/. {total_nombre:.2f}", 0, 1, 'R')
-                pdf.ln(3)
+                for col_idx, col_items in enumerate(parts):
+                    x_pos = col_idx * col_width
+                    for txn in col_items:
+                        pdf.set_xy(x_pos, y_start + heights[col_idx])
+                        pdf.cell(2, 5, "-", 0, 0, 'L')
+                        pdf.cell(5, 5, "S/.", 0, 0, 'L')
+                        pdf.cell(col_width - 8, 5, f"{txn['monto']:.2f}", 0, 1, 'R')
+                        heights[col_idx] += 5
+                
+                pdf.ln(max(heights) + 2)
+                pdf.set_y(y_start + max(heights) + 2)
+                
+            elif count > 10:
+                # 2 columnas
+                col_width = page_width / 2
+                mid_point = (count + 1) // 2
+                
+                y_start = pdf.get_y()
+                heights = [0, 0]
+                
+                for txn in transacciones_ordenadas[:mid_point]:
+                    pdf.set_xy(0, y_start + heights[0])
+                    pdf.cell(2, 5, "-", 0, 0, 'L')
+                    pdf.cell(6, 5, "S/.", 0, 0, 'L')
+                    pdf.cell(col_width - 10, 5, f"{txn['monto']:.2f}", 0, 1, 'R')
+                    heights[0] += 5
+                
+                for txn in transacciones_ordenadas[mid_point:]:
+                    pdf.set_xy(col_width, y_start + heights[1])
+                    pdf.cell(2, 5, "-", 0, 0, 'L')
+                    pdf.cell(6, 5, "S/.", 0, 0, 'L')
+                    pdf.cell(col_width - 8, 5, f"{txn['monto']:.2f}", 0, 1, 'R')
+                    heights[1] += 5
+                
+                pdf.ln(max(heights) + 2)
+                pdf.set_y(y_start + max(heights) + 2)
+                
             else:
-                # Dos columnas
-                for i in range(0, len(nombres), 2):
-                    nombre1 = nombres[i] if i < len(nombres) else ""
-                    montos1 = agrupado[fecha][nombre1] if nombre1 else []
-                    total1 = sum(montos1)
-                    
-                    nombre2 = nombres[i+1] if i+1 < len(nombres) else ""
-                    montos2 = agrupado[fecha][nombre2] if nombre2 else []
-                    total2 = sum(montos2) if nombre2 else 0
-                    
-                    # Nombres
-                    pdf.set_font("Arial", 'B', 10)
-                    pdf.cell(col_width, 4, f"{nombre1}", 0, 0, 'C')
-                    if nombre2:
-                        pdf.cell(col_width, 4, f"{nombre2}", 0, 1, 'C')
-                    else:
-                        pdf.cell(col_width, 4, "", 0, 1, 'L')
-                    
-                    # Guardar posición Y para montos columna 2
-                    y_start = pdf.get_y()
-                    
-                    # Montos columna 1 con padding
-                    pdf.set_font("Arial", '', 15)
-                    for monto in montos1:
-                        pdf.cell(3, 5, "-", 0, 0, 'L')
-                        pdf.cell(10, 5, "S/.", 0, 0, 'L')
-                        pdf.cell(col_width - 15, 5, f"{monto:.2f}", 0, 1, 'L')
-                    
-                    # Total individual columna 1
-                    pdf.set_font("Arial", 'B', 20)
-                    pdf.cell(col_width - 10, 5, "TOTAL:", 0, 0, 'L')
-                    pdf.cell(10, 5, f"S/. {total1:.2f}", 0, 1, 'R')
-                    
-                    # Montos columna 2
-                    if nombre2:
-                        pdf.set_y(y_start)
-                        pdf.set_font("Arial", '', 9)
-                        for monto in montos2:
-                            pdf.cell(col_width + 3, 5, "-", 0, 0, 'L')
-                            pdf.cell(10, 5, "S/.", 0, 0, 'L')
-                            pdf.cell(col_width, 5, f"{monto:.2f}", 0, 1, 'R')
-                        
-                        # Total individual columna 2
-                        pdf.set_font("Arial", 'B', 10)
-                        pdf.cell(col_width + 3, 5, "", 0, 0)
-                        pdf.cell(col_width - 10, 5, "TOTAL:", 0, 0, 'L')
-                        pdf.cell(10, 5, f"S/. {total2:.2f}", 0, 1, 'R')
-                    else:
-                        # Si no hay nombre2, completar espacio
-                        pdf.set_y(y_start + max(len(montos1), 1) * 5 + 5)
-                    
-                    pdf.ln(3)
+                # 1 columna
+                for txn in transacciones_ordenadas:
+                    pdf.cell(2, 5, "-", 0, 0, 'L')
+                    pdf.cell(6, 5, "S/.", 0, 0, 'L')
+                    pdf.cell(0, 5, f"{txn['monto']:.2f}", 0, 1, 'R')
+                pdf.ln(3)
+            
+            # Total
+            total_nombre = sum(txn['monto'] for txn in transacciones)
+            pdf.set_font("Arial", 'B', 15)
+            pdf.cell(0, 5, f"TOTAL: S/. {total_nombre:.2f}", 0, 1, 'R')
+            
+            pdf.ln(4)
         
         pdf.output(self.output_path)
         logger.info(f"PDF YAPES generado: {self.output_path}")
@@ -566,7 +711,7 @@ class FacturaXMLtoPDF:
         
         if pdf.get_string_width(cliente_nombre) > 190:
             pdf.set_font("Arial", 'B', 18)
-            pdf.multi_cell(contenido_destinatario, 10, cliente_nombre, 0, 'L')
+            pdf.multi_cell(contenido_destinatario, 7, cliente_nombre, 0, 'L')
         else:
             pdf.multi_cell(contenido_destinatario, 10, cliente_nombre, 0, 'L')
         
@@ -594,7 +739,7 @@ class FacturaXMLtoPDF:
         pdf.set_font("Arial", 'B', 18)
         pdf.ln(1)
         
-        pdf.multi_cell(contenido_destinatario, 8, c_dir.upper(), 'B', 'L')
+        pdf.multi_cell(contenido_destinatario, 7, c_dir.upper(), 'B', 'L')
         
         if tiene_ciudad:
             pdf.ln(1)
@@ -602,7 +747,7 @@ class FacturaXMLtoPDF:
             pdf.cell(contenido_destinatario, 5, "CIUDAD:", 0, 1, 'L')
             pdf.set_font("Arial", 'B', 15)
             pdf.ln(1)
-            pdf.multi_cell(contenido_destinatario, 8, direccion_completa, 'B', 'L')
+            pdf.multi_cell(contenido_destinatario, 7, direccion_completa, 'B', 'L')
         
         pdf.line(0, pdf.get_y(), label_width, pdf.get_y())
 
@@ -960,7 +1105,8 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversor XML a PDF</title>
+    <title>MANCHESTER PRO - Conversor XML/CSV a PDF</title>
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
@@ -1310,8 +1456,8 @@ HTML_TEMPLATE = """
                         <label for="formato">Formato de salida:</label>
                         <select name="formato" id="formato" onchange="checkFormato(); toggleAgencia()">
                             <option value="ticket" {% if selected_formato=='ticket' %}selected{% endif %}>Ticket 80mm</option>
-                            <option value="yapes" {% if selected_formato=='yapes' %}selected{% endif %}>YAPES Resumen</option>
-                            <option value="shipping_label" {% if selected_formato=='shipping_label' %}selected{% endif %}>Etiqueta de Envío</option>
+                            <option value="shipping_label" {% if selected_formato=='shipping_label' %}selected{% endif %}>Etiqueta de Envío 100mmx150mm</option>
+                            <option value="yapes" {% if selected_formato=='yapes' %}selected{% endif %}>Yapes Resumen 80mm</option>
                         </select>
                     </div>
                     
@@ -1321,6 +1467,24 @@ HTML_TEMPLATE = """
                             {% if selected_recoje %}checked{% endif %}>
                             <span style="font-weight: bold;">Recoge otra persona</span>
                         </label>
+                    </div>
+                    
+                    <div class="form-group" id="yapesFechaGroup" style="display: none;">
+                        <label style="font-weight: bold; margin-bottom: 8px; display: block;">Rango de Fechas:</label>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 120px;">
+                                <input type="date" name="yapes_fecha_inicio" id="yapes_fecha_inicio" 
+                                    value="{{ selected_yapes_fecha_inicio or '' }}"
+                                    style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white;">
+                            </div>
+                            <span style="font-weight: bold; color: #667eea;">-</span>
+                            <div style="flex: 1; min-width: 120px;">
+                                <input type="date" name="yapes_fecha_fin" id="yapes_fecha_fin" 
+                                    value="{{ selected_yapes_fecha_fin or '' }}"
+                                    style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white;">
+                            </div>
+                        </div>
+                        <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">Seleccione el rango de fechas para filtrar los registros YAPES</small>
                     </div>
                     
                     <div class="form-group" id="recojeDatosGroup" style="display: none;">
@@ -1338,10 +1502,13 @@ HTML_TEMPLATE = """
                         <label for="agencia">Agencia:</label>
                         <select name="agencia" id="agencia" onchange="toggleOtraAgencia()">
                             <option value="">Seleccionar agencia</option>
-                            <option value="FLORES" {% if selected_agencia=='FLORES' %}selected{% endif %}>FLORES</option>
+                            <option value="FLORES HERMANOS" {% if selected_agencia=='FLORES HERMANOS' %}selected{% endif %}>FLORES HERMANOS</option>
                             <option value="MARVISUR" {% if selected_agencia=='MARVISUR' %}selected{% endif %}>MARVISUR</option>
+                            <option value="ANTEZANA" {% if selected_agencia=='ANTEZANA' %}selected{% endif %}>ANTEZANA</option>
                             <option value="GRAEL" {% if selected_agencia=='GRAEL' %}selected{% endif %}>GRAEL</option>
                             <option value="RANA EXPRESS" {% if selected_agencia=='RANA EXPRESS' %}selected{% endif %}>RANA EXPRESS</option>
+                            <option value="SHALOM" {% if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
+                            <option value="TURISMOS DIAS" {% if selected_agencia=='TURISMOS DIAS' %}selected{% endif %}>TURISMOS DIAS</option>
                             <option value="OTRA" {% if selected_agencia=='OTRA' %}selected{% endif %}>Otra agencia</option>
                         </select>
                     </div>
@@ -1382,7 +1549,7 @@ HTML_TEMPLATE = """
                     <p><strong>Emisor:</strong> {{ info.emisor }}</p>
                     <p><strong>Cliente:</strong> {{ info.cliente }}</p>
                     <p><strong>Total:</strong> {{ info.total }}</p>
-                    <p><strong>Fecha:</strong> {{ info.fecha }}</p>
+                    <p><strong>{% if info.tipo == 'YAPES RESUMEN' %}Rango de Fechas{% else %}Fecha{% endif %}:</strong> {{ info.fecha }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -1404,8 +1571,12 @@ HTML_TEMPLATE = """
     }
     
     function checkFormato() {
-        // Botón siempre habilitado
+        toggleAgencia();
     }
+    
+    window.addEventListener('DOMContentLoaded', function() {
+        toggleAgencia();
+    });
     
     function validarArchivo() {
         var input = document.getElementById('xml_file');
@@ -1463,15 +1634,23 @@ HTML_TEMPLATE = """
         var agenciaGroup = document.getElementById('agenciaGroup');
         var notasGroup = document.getElementById('notasGroup');
         var recojeGroup = document.getElementById('recojeGroup');
+        var yapesFechaGroup = document.getElementById('yapesFechaGroup');
         
         if (formato === 'shipping_label') {
             agenciaGroup.style.display = 'block';
             notasGroup.style.display = 'block';
             recojeGroup.style.display = 'block';
+            yapesFechaGroup.style.display = 'none';
+        } else if (formato === 'yapes') {
+            agenciaGroup.style.display = 'none';
+            notasGroup.style.display = 'none';
+            recojeGroup.style.display = 'none';
+            yapesFechaGroup.style.display = 'block';
         } else {
             agenciaGroup.style.display = 'none';
             notasGroup.style.display = 'none';
             recojeGroup.style.display = 'none';
+            yapesFechaGroup.style.display = 'none';
             document.getElementById('agencia').value = '';
             document.getElementById('otra_agencia').value = '';
             document.getElementById('other_notes').value = '';
@@ -1570,6 +1749,8 @@ def index():
     selected_recoje_dni = ''
     selected_recoje_nombre = ''
     selected_recoje_direccion = ''
+    selected_yapes_fecha_inicio = ''
+    selected_yapes_fecha_fin = ''
     
     if temp_id:
         pdf_path = os.path.join('temp_files', f'{temp_id}.pdf')
@@ -1586,8 +1767,10 @@ def index():
             selected_recoje_dni = session.get('selected_recoje_dni', '')
             selected_recoje_nombre = session.get('selected_recoje_nombre', '')
             selected_recoje_direccion = session.get('selected_recoje_direccion', '')
+            selected_yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+            selected_yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
     
-    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name, selected_formato=selected_formato, selected_agencia=selected_agencia, selected_otra_agencia=selected_otra_agencia, selected_notes=selected_notes, selected_recoje=selected_recoje, selected_recoje_dni=selected_recoje_dni, selected_recoje_nombre=selected_recoje_nombre, selected_recoje_direccion=selected_recoje_direccion)
+    return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=xml_file_name, selected_formato=selected_formato, selected_agencia=selected_agencia, selected_otra_agencia=selected_otra_agencia, selected_notes=selected_notes, selected_recoje=selected_recoje, selected_recoje_dni=selected_recoje_dni, selected_recoje_nombre=selected_recoje_nombre, selected_recoje_direccion=selected_recoje_direccion, selected_yapes_fecha_inicio=selected_yapes_fecha_inicio, selected_yapes_fecha_fin=selected_yapes_fecha_fin)
 
 
 @app.route('/convertir', methods=['GET', 'POST'])
@@ -1609,6 +1792,9 @@ def convertir():
         recoje_dni = request.form.get('recoje_dni', '')
         recoje_nombre = request.form.get('recoje_nombre', '')
         recoje_direccion = request.form.get('recoje_direccion', '')
+        yapes_fecha_inicio = request.form.get('yapes_fecha_inicio', '')
+        yapes_fecha_fin = request.form.get('yapes_fecha_fin', '')
+        logger.info(f"YAPES INPUT fechas: inicio={yapes_fecha_inicio}, fin={yapes_fecha_fin}")
         
         # Verificar si hay archivo nuevo o usar el de sesión
         xml_data = None
@@ -1620,6 +1806,8 @@ def convertir():
             import uuid as uuid_module
             xml_data = xml_file.read()
             filename = xml_file.filename.lower()
+            
+            logger.info(f"Archivo recibido: {filename}, tamaño={len(xml_data)} bytes")
             
             # Guardar en sesión con Redis (persiste entre requests)
             session['xml_file_data'] = xml_data
@@ -1644,10 +1832,12 @@ def convertir():
             filename = session.get('xml_file_name', '').lower()
             # Primero intentar usar datos de sesión (con Redis esto funciona)
             xml_data = session.get('xml_file_data')
+            logger.info(f"Recuperando de sesión: xml_file_data={len(xml_data) if xml_data else 'None'} bytes")
             if not xml_data and xml_path and os.path.exists(xml_path):
                 with open(xml_path, 'rb') as f:
                     xml_data = f.read()
-            logger.info(f"Usando XML existente: {xml_path}, data_len={len(xml_data) if xml_data else 0}")
+                logger.info(f"Recuperando de archivo: {xml_path}={len(xml_data)} bytes")
+            logger.info(f"Usando datos: {len(xml_data) if xml_data else 0} bytes")
         
         if not xml_data:
             return render_template_string(HTML_TEMPLATE, error="Por favor, selecciona un archivo")
@@ -1660,24 +1850,39 @@ def convertir():
             if not filename.endswith('.csv'):
                 return render_template_string(HTML_TEMPLATE, error="Para formato YAPES debe subir un archivo CSV")
             
-            # Procesar CSV para YAPES - usar el archivo XML/CSV guardado
-            csv_path = session.get('csv_file_path')
-            if not csv_path or not os.path.exists(csv_path):
-                # Copiar el archivo XML como CSV
-                import uuid as uuid_module
-                csv_temp_id = uuid_module.uuid4().hex
-                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
-                with open(csv_path, 'wb') as f:
-                    f.write(xml_data)
-                session['csv_file_path'] = csv_path
+            # Procesar CSV para YAPES - siempre reescribir desde sesión para evitar truncado
+            import uuid as uuid_module
+            csv_temp_id = uuid_module.uuid4().hex
+            csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
             
+            # Verificar tipo de datos y extraer xml_data de sesión
+            if not xml_data:
+                xml_data = session.get('xml_file_data')
+            
+            if isinstance(xml_data, str):
+                xml_data = xml_data.encode('utf-8')
+            
+            with open(csv_path, 'wb') as f:
+                f.write(xml_data)
+            
+            logger.info(f"Guardando CSV en disco: {len(xml_data)} bytes, verificado: {os.path.getsize(csv_path)} bytes")
+            session['csv_file_path'] = csv_path
+            
+            import uuid as uuid_module
             pdf_temp_id = uuid_module.uuid4().hex
             output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
             
-            yapes = YapesPDF(csv_path, output_path)
+            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
             
             if not yapes.parse_csv():
                 return render_template_string(HTML_TEMPLATE, error="Error al procesar el CSV. Formato: Nombre,Monto,Fecha")
+            
+            if not yapes.data:
+                inicio_fmt = datetime.strptime(yapes_fecha_inicio, '%Y-%m-%d').strftime('%d/%m/%Y') if yapes_fecha_inicio else 'N/A'
+                fin_fmt = datetime.strptime(yapes_fecha_fin, '%Y-%m-%d').strftime('%d/%m/%Y') if yapes_fecha_fin else 'N/A'
+                msg = f"No se encontraron registros entre {inicio_fmt} y {fin_fmt}. Verifique que el archivo contenga datos en ese rango."
+                logger.warning(f"YAPES sin datos: {msg}")
+                return render_template_string(HTML_TEMPLATE, error=msg)
             
             yapes.generate_pdf()
             
@@ -1691,7 +1896,7 @@ def convertir():
                 'emisor': '-',
                 'cliente': 'Varios',
                 'total': '-',
-                'fecha': datetime.now().strftime('%d/%m/%Y')
+                'fecha': yapes.rango_fechas_yape if yapes.rango_fechas_yape else datetime.now().strftime('%d/%m/%Y')
             }
             
         elif filename.endswith('.xml'):
@@ -1758,12 +1963,16 @@ def convertir():
         session['selected_recoje_dni'] = recoje_dni if formato == 'shipping_label' else ''
         session['selected_recoje_nombre'] = recoje_nombre if formato == 'shipping_label' else ''
         session['selected_recoje_direccion'] = recoje_direccion if formato == 'shipping_label' else ''
+        if yapes_fecha_inicio:
+            session['selected_yapes_fecha_inicio'] = yapes_fecha_inicio
+        if yapes_fecha_fin:
+            session['selected_yapes_fecha_fin'] = yapes_fecha_fin
         session.modified = True
         
         # Retornar con vista previa
         pdf_url = url_for('view_pdf', temp_id=temp_id)
         logger.info(f"PDF generado: temp_id={temp_id}, url={pdf_url}, xml_data={session.get('xml_file_data') is not None}")
-        return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion)
+        return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion, selected_yapes_fecha_inicio=session.get('selected_yapes_fecha_inicio', ''), selected_yapes_fecha_fin=session.get('selected_yapes_fecha_fin', ''))
         
     except Exception as e:
         logger.exception("Error en conversión")
@@ -1774,6 +1983,12 @@ def convertir():
 def health():
     """Health check"""
     return jsonify({'status': 'ok', 'service': 'XML to PDF Converter'})
+
+@app.route('/images/<path:filename>')
+def serve_image(filename):
+    """Servir archivos de la carpeta images"""
+    from flask import send_from_directory
+    return send_from_directory('images', filename)
 
 
 @app.route('/pdf/<temp_id>')
@@ -1826,7 +2041,21 @@ def view_pdf(temp_id):
             }
         
         if formato == 'yapes':
-            return "Formato YAPES necesita ser regenerado. Por favor, convierte nuevamente.", 404
+            csv_path = session.get('csv_file_path')
+            if not csv_path or not os.path.exists(csv_path):
+                import uuid as uuid_module
+                csv_temp_id = uuid_module.uuid4().hex
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
+                with open(csv_path, 'wb') as f:
+                    f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+                session['csv_file_path'] = csv_path
+            
+            yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+            yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            if not yapes.parse_csv():
+                return "Error al procesar el CSV", 500
+            yapes.generate_pdf()
         else:
             factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
             if not factura.parse_xml():
@@ -1895,7 +2124,21 @@ def download_pdf():
             }
         
         if formato == 'yapes':
-            return "Formato YAPES necesita ser regenerado.", 404
+            csv_path = session.get('csv_file_path')
+            if not csv_path or not os.path.exists(csv_path):
+                import uuid as uuid_module
+                csv_temp_id = uuid_module.uuid4().hex
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
+                with open(csv_path, 'wb') as f:
+                    f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+                session['csv_file_path'] = csv_path
+            
+            yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+            yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            if not yapes.parse_csv():
+                return "Error al procesar el CSV", 500
+            yapes.generate_pdf()
         else:
             factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
             if not factura.parse_xml():
