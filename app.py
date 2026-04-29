@@ -513,9 +513,9 @@ class FacturaXMLtoPDF:
         
         pdf.set_font("Arial", '', 9)
         pdf.set_xy(remitente_x, pdf.get_y())
-        pdf.set_char_spacing(0.5)
+        pdf.set_word_spacing(0.5)
         pdf.cell(50, 4, f"RUC: {emisor_ruc}", 'LR', 1, 'C')
-        pdf.set_char_spacing(0.0)
+        pdf.set_word_spacing(0.0)
         
         pdf.set_font("Arial", 'B', 9)
         pdf.set_xy(remitente_x, pdf.get_y())
@@ -567,10 +567,10 @@ class FacturaXMLtoPDF:
         pdf.ln(2)
         
         pdf.set_font("Arial", '', 18)
-        pdf.set_char_spacing(0.5)
+        pdf.set_word_spacing(0.5)
         id_label = "RUC" if len(cliente_id) == 11 else ("DNI" if len(cliente_id) == 8 else "CE")
         pdf.cell(contenido_destinatario, 5, f"{id_label}: {cliente_id}", 0, 1, 'L')
-        pdf.set_char_spacing(0.0)
+        pdf.set_word_spacing(0.0)
         pdf.ln(1)
         
         invalidos = ['N/A', 'n/a', '-', '--', '---', '', None]
@@ -678,7 +678,7 @@ class FacturaXMLtoPDF:
         pdf.set_fill_color(255, 255, 255)
         
         pdf.set_font("Arial", 'B', 9)
-        pdf.set_char_spacing(1)
+        pdf.set_word_spacing(1)
         pdf.cell(info_width, 7.5, f"N° DE DOC.: {num_documento}", 1, 1, 'C', True)
         
         pdf.set_x(info_x)
@@ -688,7 +688,7 @@ class FacturaXMLtoPDF:
         pdf.set_x(info_x)
         pdf.set_font("Arial", 'B', 9)
         pdf.cell(info_width, 7.5, f"FECHA DE EMISIÓN: {fecha_formateada}", 1, 1, 'C', True)
-        pdf.set_char_spacing(0)
+        pdf.set_word_spacing(0)
         
         pdf.output(self.output_path)
         logger.info(f"Etiqueta de envío generada: {self.output_path} (100mm x 150mm)")
@@ -754,9 +754,9 @@ class FacturaXMLtoPDF:
             pdf.cell(0, 4, emisor_nombre, 0, 1, 'C')
         
         pdf.set_font("Arial", '', 10)
-        pdf.set_char_spacing(0.5)
+        pdf.set_word_spacing(0.5)
         pdf.cell(0, 4, f"RUC: {self.data.get('emisor_ruc', 'N/A')}", 0, 1, 'C')
-        pdf.set_char_spacing(0.0)
+        pdf.set_word_spacing(0.0)
         
         # Dirección emisor
         emisor_dir = self.data.get('emisor_direccion', '')
@@ -781,9 +781,9 @@ class FacturaXMLtoPDF:
         pdf.set_font("Arial", '', 10)
         pdf.cell(0, 4, f"{self.data.get('tipo_documento', 'COMPROBANTE')} ELECTRÓNICA", 0, 1, 'C')
         pdf.set_font("Arial", 'B', 14)
-        pdf.set_char_spacing(1)
+        pdf.set_word_spacing(1)
         pdf.cell(0, 5, self.data.get('numero_factura', 'N/A'), 0, 1, 'C')
-        pdf.set_char_spacing(0)
+        pdf.set_word_spacing(0)
         
         pdf.ln(2)
         pdf.cell(0, 1, "", "T", 1)
@@ -889,11 +889,11 @@ class FacturaXMLtoPDF:
             pdf.cell(anchuras[0], 3, str(item.get('id', ''))[:20], 1, 0, 'C')
             pdf.set_font("Arial", '', 10)
 
-            pdf.set_char_spacing(1)
+            pdf.set_word_spacing(1)
             cantidad = float(item.get('cantidad', '0'))
 
             pdf.cell(anchuras[1], 3, f"{cantidad:.2f}"[:6], 1, 0, 'C')
-            pdf.set_char_spacing(0.0)
+            pdf.set_word_spacing(0.0)
             pdf.set_font("Arial", '', 8)
 
             pdf.cell(anchuras[2], 3, str(item.get('unidad', 'MTS'))[:4], 1, 0, 'C')
