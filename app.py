@@ -950,7 +950,7 @@ class FacturaXMLtoPDF:
         pdf.set_font("Arial", '', 10)
         cliente_nombre = self.data.get('cliente_nombre', 'N/A').upper()
         label = "RAZÓN SOCIAL:" if len(cliente_id) == 11 else "CLIENTE:"
-        if len(cliente_nombre) > 25:
+        if len(cliente_nombre) > 24:
             pdf.multi_cell(0, 4, f"{label} {cliente_nombre}", 0, 'L')
         else:
             pdf.cell(0, 4, f"{label} {cliente_nombre}", 0, 1, 'L')
