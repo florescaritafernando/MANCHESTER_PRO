@@ -710,7 +710,7 @@ class FacturaXMLtoPDF:
         pdf.set_font("Arial", 'B', 26)
         
         if pdf.get_string_width(cliente_nombre) > 190:
-            pdf.set_font("Arial", 'B', 18)
+            pdf.set_font("Arial", 'B', 22)
             pdf.multi_cell(contenido_destinatario, 7, cliente_nombre, 0, 'L')
         else:
             pdf.multi_cell(contenido_destinatario, 10, cliente_nombre, 0, 'L')
