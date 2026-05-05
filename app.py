@@ -614,7 +614,7 @@ class FacturaXMLtoPDF:
         
         y += safe_div(30, 3) + 20 + 4 + 4 + 20
         
-        return max(100, min(800, y + 30))
+        return max(100, min(175, y + 30))
     
     def generate_pdf(self, output_format: str = 'ticket'):
         """Generar PDF según formato"""
