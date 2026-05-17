@@ -791,6 +791,10 @@ class FacturaXMLtoPDF:
         qr_width = 20
         qr_x = 1
         qr_y = label_height - qr_width - 5
+
+        pdf.set_font("Arial", 'B', 7)
+        pdf.set_xy(0, qr_y - 5)
+        pdf.cell(100, 4, "VISITANOS EN: WWW.MANCHESTERCOLLECTIONPERU.COM", 0, 0, 'C')
         
         qr_path = "images/qr_mostrario.png"
         if os.path.exists(qr_path):
@@ -804,8 +808,8 @@ class FacturaXMLtoPDF:
         
         pdf.set_font("Arial", 'B', 8)
         pdf.set_xy(qr_x, qr_y + qr_width)
-        pdf.cell(qr_width, 4, "CATÁLOGO", 0, 0, 'C')
-        
+        pdf.cell(qr_width, 4, "SITIO WEB", 0, 0, 'C')
+                
         num_documento = self.data.get('numero_factura', 'N/A')
         fecha = self.data.get('fecha_emision', 'N/A')
         guia_remision = self.data.get('cliente_guia', 'N/A')
