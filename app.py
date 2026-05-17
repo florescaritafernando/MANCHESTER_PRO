@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-"""
-🧾 APP DE CONVERSIÓN XML A PDF - TICKET 80mm
-"""
-
 import xml.etree.ElementTree as ET
 from fpdf import FPDF
 import os
@@ -1223,7 +1218,6 @@ def clear_session():
 if __name__ == '__main__':
     os.makedirs("images", exist_ok=True)
     port = int(os.environ.get('PORT', 5000))
-=======
 """
 APP DE CONVERSIÓN XML A PDF - TICKET 80mm
 """
@@ -3427,5 +3421,4 @@ def clear_session():
 if __name__ == '__main__':
     os.makedirs("images", exist_ok=True)
     port = int(os.environ.get('PORT', 5000))
->>>>>>> f13df2140d2c44f4515fbeecd3e243bbfe391c2a
     app.run(host='0.0.0.0', port=port, debug=False)
