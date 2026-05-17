@@ -792,7 +792,7 @@ class FacturaXMLtoPDF:
         qr_x = 1
         qr_y = label_height - qr_width - 5
 
-        pdf.set_font("Arial", 'B', 7)
+        pdf.set_font("Arial", 'B', 10)
         pdf.set_xy(0, qr_y - 5)
         pdf.cell(100, 4, "VISITANOS EN: WWW.MANCHESTERCOLLECTIONPERU.COM", 0, 0, 'C')
         
