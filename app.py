@@ -1506,7 +1506,7 @@ HTML_TEMPLATE = """
                             <option value="ANTEZANA" {% if selected_agencia=='ANTEZANA' %}selected{% endif %}>ANTEZANA</option>
                             <option value="GRAEL" {% if selected_agencia=='GRAEL' %}selected{% endif %}>GRAEL</option>
                             <option value="RANA EXPRESS" {% if selected_agencia=='RANA EXPRESS' %}selected{% endif %}>RANA EXPRESS</option>
-                            <option value="SHALOM" {% if if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
+                            <option value="SHALOM" {% if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
                             <option value="TURISMOS DIAS" {% if selected_agencia=='TURISMOS DIAS' %}selected{% endif %}>TURISMOS DIAS</option>
                             <option value="OTRA" {% if selected_agencia=='OTRA' %}selected{% endif %}>Otra agencia</option>
                         </select>
