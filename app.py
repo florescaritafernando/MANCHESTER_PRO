@@ -1440,6 +1440,7 @@ HTML_TEMPLATE = """
     <div class="container">
         <h1>Conversor XML a PDF</h1>
         
+        
         <div class="main-content">
             <div class="right-panel">
                 <form id="convertirForm" method="POST" action="/convertir" enctype="multipart/form-data" onsubmit="return validarArchivo()">
@@ -1506,7 +1507,7 @@ HTML_TEMPLATE = """
                             <option value="ANTEZANA" {% if selected_agencia=='ANTEZANA' %}selected{% endif %}>ANTEZANA</option>
                             <option value="GRAEL" {% if selected_agencia=='GRAEL' %}selected{% endif %}>GRAEL</option>
                             <option value="RANA EXPRESS" {% if selected_agencia=='RANA EXPRESS' %}selected{% endif %}>RANA EXPRESS</option>
-                            <option value="SHALOM" {% if if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
+                            <option value="SHALOM" {% if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
                             <option value="TURISMOS DIAS" {% if selected_agencia=='TURISMOS DIAS' %}selected{% endif %}>TURISMOS DIAS</option>
                             <option value="OTRA" {% if selected_agencia=='OTRA' %}selected{% endif %}>Otra agencia</option>
                         </select>
@@ -1528,7 +1529,6 @@ HTML_TEMPLATE = """
                     {% if pdf_url %}
                     <a href="/download" class="btn btn-download">Descargar PDF</a>
                     {% endif %}
-                </form>
             </div>
             
             <div class="left-panel">
@@ -1554,6 +1554,8 @@ HTML_TEMPLATE = """
                 {% endif %}
             </div>
         </div>
+        
+        
     </div>
     
     <script>
@@ -1564,7 +1566,7 @@ HTML_TEMPLATE = """
         if (input.files && input.files[0]) {
             var name = input.files[0].name;
             fileLabel.classList.add('active');
-            fileLabel.innerHTML = name + ' <span onclick="removeFile(event)" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
+            fileLabel.innerHTML = name + ' <span onclick="removeFile()" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
         }
     }
     
@@ -1572,10 +1574,15 @@ HTML_TEMPLATE = """
         toggleAgencia();
     }
     
+    window.addEventListener('DOMContentLoaded', function() {
+        toggleAgencia();
+    });
+    
     function validarArchivo() {
         var input = document.getElementById('xml_file');
         var fileLabel = document.getElementById('fileLabel');
         
+        // Verificar si hay archivo seleccionado o si ya se había subido uno antes
         if ((!input.files || !input.files[0]) && (!fileLabel.classList.contains('active'))) {
             Swal.fire({
                 icon: 'warning',
@@ -1587,6 +1594,7 @@ HTML_TEMPLATE = """
             return false;
         }
         
+        // Verificar que tenga contenido el archivo si es nuevo
         if (input.files && input.files[0]) {
             var fileName = input.files[0].name.toLowerCase();
             if (!fileName.endsWith('.xml') && !fileName.endsWith('.csv')) {
@@ -1600,17 +1608,6 @@ HTML_TEMPLATE = """
                 return false;
             }
         }
-        
-        // Muestra indicador de carga antes de enviar para evitar dobles clics
-        Swal.fire({
-            title: 'Procesando documento...',
-            text: 'Por favor espera un momento',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
         
         return true;
     }
@@ -1640,26 +1637,24 @@ HTML_TEMPLATE = """
         var yapesFechaGroup = document.getElementById('yapesFechaGroup');
         
         if (formato === 'shipping_label') {
-            if(agenciaGroup) agenciaGroup.style.display = 'block';
-            if(notasGroup) notasGroup.style.display = 'block';
-            if(recojeGroup) recojeGroup.style.display = 'block';
-            if(yapesFechaGroup) yapesFechaGroup.style.display = 'none';
+            agenciaGroup.style.display = 'block';
+            notasGroup.style.display = 'block';
+            recojeGroup.style.display = 'block';
+            yapesFechaGroup.style.display = 'none';
         } else if (formato === 'yapes') {
-            if(agenciaGroup) agenciaGroup.style.display = 'none';
-            if(notasGroup) notasGroup.style.display = 'none';
-            if(recojeGroup) recojeGroup.style.display = 'none';
-            if(yapesFechaGroup) yapesFechaGroup.style.display = 'block';
+            agenciaGroup.style.display = 'none';
+            notasGroup.style.display = 'none';
+            recojeGroup.style.display = 'none';
+            yapesFechaGroup.style.display = 'block';
         } else {
-            if(agenciaGroup) agenciaGroup.style.display = 'none';
-            if(notasGroup) notasGroup.style.display = 'none';
-            if(recojeGroup) recojeGroup.style.display = 'none';
-            if(yapesFechaGroup) yapesFechaGroup.style.display = 'none';
-            
-            if(document.getElementById('agencia')) document.getElementById('agencia').value = '';
-            if(document.getElementById('otra_agencia')) document.getElementById('otra_agencia').value = '';
-            if(document.getElementById('other_notes')) document.getElementById('other_notes').value = '';
-            if(document.getElementById('recoje_otra_persona')) document.getElementById('recoje_otra_persona').checked = false;
-            
+            agenciaGroup.style.display = 'none';
+            notasGroup.style.display = 'none';
+            recojeGroup.style.display = 'none';
+            yapesFechaGroup.style.display = 'none';
+            document.getElementById('agencia').value = '';
+            document.getElementById('otra_agencia').value = '';
+            document.getElementById('other_notes').value = '';
+            document.getElementById('recoje_otra_persona').checked = false;
             toggleRecojeOtraPersona();
             toggleOtraAgencia();
         }
@@ -1669,15 +1664,13 @@ HTML_TEMPLATE = """
         var checkbox = document.getElementById('recoje_otra_persona');
         var datosGroup = document.getElementById('recojeDatosGroup');
         
-        if (checkbox && datosGroup) {
-            if (checkbox.checked) {
-                datosGroup.style.display = 'block';
-            } else {
-                datosGroup.style.display = 'none';
-                if(document.getElementById('recoje_dni')) document.getElementById('recoje_dni').value = '';
-                if(document.getElementById('recoje_nombre')) document.getElementById('recoje_nombre').value = '';
-                if(document.getElementById('recoje_direccion')) document.getElementById('recoje_direccion').value = '';
-            }
+        if (checkbox.checked) {
+            datosGroup.style.display = 'block';
+        } else {
+            datosGroup.style.display = 'none';
+            document.getElementById('recoje_dni').value = '';
+            document.getElementById('recoje_nombre').value = '';
+            document.getElementById('recoje_direccion').value = '';
         }
     }
     
@@ -1685,13 +1678,11 @@ HTML_TEMPLATE = """
         var agencia = document.getElementById('agencia').value;
         var otraAgenciaGroup = document.getElementById('otraAgenciaGroup');
         
-        if (otraAgenciaGroup) {
-            if (agencia === 'OTRA') {
-                otraAgenciaGroup.style.display = 'block';
-            } else {
-                otraAgenciaGroup.style.display = 'none';
-                if(document.getElementById('otra_agencia')) document.getElementById('otra_agencia').value = '';
-            }
+        if (agencia === 'OTRA') {
+            otraAgenciaGroup.style.display = 'block';
+        } else {
+            otraAgenciaGroup.style.display = 'none';
+            document.getElementById('otra_agencia').value = '';
         }
     }
     
@@ -1704,44 +1695,37 @@ HTML_TEMPLATE = """
         fileLabel.classList.remove('active');
         fileLabel.innerHTML = 'Subir archivo';
     }
-
-    function inicializarInterfaz() {
-        // Asegurarnos de que SweetAlert cierre cualquier carga colgada en el caché
-        if (typeof Swal !== 'undefined' && Swal.close) {
-            Swal.close();
-        }
-
-        // Ejecutar los toggles para sincronizar la UI según la opción cargada
-        toggleAgencia();
-        toggleRecojeOtraPersona();
-        toggleOtraAgencia();
-
-        {% if xml_file_name %}
+    
+    // On page load, mantener archivo si existe
+    {% if xml_file_name %}
+    document.addEventListener('DOMContentLoaded', function() {
         var fileLabel = document.getElementById('fileLabel');
-        if (fileLabel) {
-            fileLabel.classList.add('active');
-            fileLabel.innerHTML = '{{ xml_file_name }} <span onclick="removeFile(event)" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
-        }
         
+        fileLabel.classList.add('active');
+        fileLabel.innerHTML = '{{ xml_file_name }} <span onclick="removeFile()" style="cursor:pointer;font-size:1.2rem;">&times;</span>';
+        
+        // Mantener formato seleccionado
         var formato = '{{ selected_formato }}';
         if (formato === 'shipping_label') {
+            document.getElementById('agenciaGroup').style.display = 'block';
+            document.getElementById('notasGroup').style.display = 'block';
+            document.getElementById('recojeGroup').style.display = 'block';
+            
+            // Ver si mostrar otra agencia
             var agencia = '{{ selected_agencia }}';
-            if (agencia === 'OTRA' && document.getElementById('otraAgenciaGroup')) {
+            if (agencia === 'OTRA') {
                 document.getElementById('otraAgenciaGroup').style.display = 'block';
             }
             
+            // Ver si mostrar datos de recoje
             var recoje = '{{ selected_recoje }}';
             if (recoje === 'true') {
-                if(document.getElementById('recoje_otra_persona')) document.getElementById('recoje_otra_persona').checked = true;
-                if(document.getElementById('recojeDatosGroup')) document.getElementById('recojeDatosGroup').style.display = 'block';
+                document.getElementById('recoje_otra_persona').checked = true;
+                document.getElementById('recojeDatosGroup').style.display = 'block';
             }
         }
-        {% endif %}
-    }
-
-    // Sincronizaciones seguras en ciclos de vida de la pestaña
-    document.addEventListener('DOMContentLoaded', inicializarInterfaz);
-    window.addEventListener('pageshow', inicializarInterfaz);
+    });
+    {% endif %}
     </script>
 </body>
 </html>
