@@ -1110,7 +1110,7 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversor XML a PDF</title>
-    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/images/favicon.ico?v=2" type="image/x-icon">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
@@ -1509,6 +1509,7 @@ HTML_TEMPLATE = """
                             <option value="MARVISUR" {% if selected_agencia=='MARVISUR' %}selected{% endif %}>MARVISUR</option>
                             <option value="ANTEZANA" {% if selected_agencia=='ANTEZANA' %}selected{% endif %}>ANTEZANA</option>
                             <option value="GRAEL" {% if selected_agencia=='GRAEL' %}selected{% endif %}>GRAEL</option>
+                            <option value="RAZA" {% if selected_agencia=='RAZA' %}selected{% endif %}>RAZA</option>
                             <option value="RANA EXPRESS" {% if selected_agencia=='RANA EXPRESS' %}selected{% endif %}>RANA EXPRESS</option>
                             <option value="SHALOM" {% if selected_agencia=='SHALOM' %}selected{% endif %}>SHALOM</option>
                             <option value="TURISMOS DIAS" {% if selected_agencia=='TURISMOS DIAS' %}selected{% endif %}>TURISMOS DIAS</option>
