@@ -1993,8 +1993,7 @@ def convertir():
         # Retornar con vista previa
         pdf_url = url_for('view_pdf', temp_id=temp_id)
         logger.info(f"PDF generado: temp_id={temp_id}, url={pdf_url}, xml_data={session.get('xml_file_data') is not None}")
-        return render_template_string(HTML_TEMPLATE, pdf_url=pdf_url, info=info, pdf_name=pdf_name, xml_file_name=session.get('xml_file_name', ''), selected_formato=formato, selected_agencia=agencia, selected_otra_agencia=otra_agencia, selected_notes=other_notes, selected_recoje=session.get('selected_recoje', ''), selected_recoje_dni=recoje_dni, selected_recoje_nombre=recoje_nombre, selected_recoje_direccion=recoje_direccion, selected_yapes_fecha_inicio=session.get('selected_yapes_fecha_inicio', ''), selected_yapes_fecha_fin=session.get('selected_yapes_fecha_fin', ''))
-        
+        return redirect(url_for('index'))        
     except Exception as e:
         logger.exception("Error en conversión")
         return render_template_string(HTML_TEMPLATE, error=f"Error: {str(e)}")
