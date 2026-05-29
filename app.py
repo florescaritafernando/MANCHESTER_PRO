@@ -71,6 +71,7 @@ CONFIG = {
 YAPES_SHEETS_URL = "https://docs.google.com/spreadsheets/d/1-egUiQ0K7vYh1rqT0EC0acx5zbFzy5V6IoEGwrNPiAs/export?format=csv"
 
 
+
 class YapesPDF:
     """Clase para generar PDF de YAPES"""
     
