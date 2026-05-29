@@ -14,6 +14,8 @@ import qrcode
 import logging
 import uuid
 from functools import wraps
+import openpyxl
+import requests
 from flask import Flask, request, send_file, render_template_string, jsonify, session, redirect, url_for
 from flask_session import Session
 
@@ -61,23 +63,26 @@ app.config.update(
 # Configuración de la app
 CONFIG = {
     'MAX_FILE_SIZE': 10 * 1024 * 1024,  # 10MB max
-    'ALLOWED_EXTENSIONS': ['.xml', '.csv'],
+    'ALLOWED_EXTENSIONS': ['.xml', '.csv', '.xlsx'],
     'DEFAULT_FORMAT': 'ticket',
     'PAGE_WIDTH': 80,
 }
+
+YAPES_SHEETS_URL = "https://docs.google.com/spreadsheets/d/1-egUiQ0K7vYh1rqT0EC0acx5zbFzy5V6IoEGwrNPiAs/export?format=csv"
 
 
 class YapesPDF:
     """Clase para generar PDF de YAPES"""
     
-    def __init__(self, csv_path: str, output_path: str, fecha_inicio: str = '', fecha_fin: str = ''):
-        self.csv_path = csv_path
+    def __init__(self, csv_path: str = '', output_path: str = '', fecha_inicio: str = '', fecha_fin: str = '', sheets_url: str = ''):
+        self.file_path = csv_path
         self.output_path = output_path
+        self.sheets_url = sheets_url
         self.data = []
         self.rango_fechas_yape = ""
         self.fecha_inicio = fecha_inicio
         self.fecha_fin = fecha_fin
-        logger.info(f"YapesPDF INIT: fecha_inicio={fecha_inicio}, fecha_fin={fecha_fin}")
+        logger.info(f"YapesPDF INIT: fecha_inicio={fecha_inicio}, fecha_fin={fecha_fin}, sheets_url={'SI' if sheets_url else 'NO'}")
         
     def _limpiar_texto(self, texto: str) -> str:
         """Limpiar texto: quitar espacios extra, comillas, etc."""
@@ -97,6 +102,24 @@ class YapesPDF:
         nombre_normalizado = unicodedata.normalize('NFD', nombre)
         nombre_normalizado = ''.join(c for c in nombre_normalizado if unicodedata.category(c) != 'Mn')
         return nombre_normalizado
+    
+    def _parsear_monto(self, raw: str) -> float:
+        """Parsear monto: soporta '128.5 blabla' → 128.5 y '128 con 6' → 128.60"""
+        raw = raw.strip()
+        import re
+        # Detectar patrón "X con Y" (ej: "128 con 6" → 128.60)
+        m = re.search(r'(\d+)\s*con\s*(\d+)', raw, re.IGNORECASE)
+        if m:
+            entero = m.group(1)
+            decimal = m.group(2).ljust(2, '0')[:2]
+            return float(f"{entero}.{decimal}")
+        # Caso normal: limpiar y tomar número del inicio
+        s = raw.replace(',', '.')
+        s = re.sub(r'[^\d.]', '', s)
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
     
     def _parsear_fecha(self, fecha_raw: str) -> tuple:
         """Parsear fecha, separar fecha y hora si existe"""
@@ -142,10 +165,10 @@ class YapesPDF:
     def parse_csv(self) -> bool:
         """Parsear archivo CSV"""
         try:
-            with open(self.csv_path, 'r', encoding='utf-8') as f:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             
-            logger.info(f"CSV leído: total líneas={len(lines)}, primera={lines[1][:50] if len(lines) > 1 else 'N/A'}, tamaño_archivo={os.path.getsize(self.csv_path) if os.path.exists(self.csv_path) else 'N/A'} bytes")
+            logger.info(f"CSV leído: total líneas={len(lines)}, primera={lines[1][:50] if len(lines) > 1 else 'N/A'}, tamaño_archivo={os.path.getsize(self.file_path) if os.path.exists(self.file_path) else 'N/A'} bytes")
             
             if len(lines) < 2:
                 return False
@@ -178,16 +201,7 @@ class YapesPDF:
                 logger.info(f"Línea {lineas_procesadas}: {len(parts)} partes, parts={parts[:3]}")
                 
                 if len(parts) >= 2 and parts[0] and parts[1]:
-                    # Parsear monto manteniendo decimales
-                    monto_str = parts[1].strip()
-                    monto_str = monto_str.replace(',', '.')
-                    monto_str = re.sub(r'[^\d.]', '', monto_str)
-                    
-                    try:
-                        monto = float(monto_str)
-                    except ValueError:
-                        logger.warning(f"Monto inválido: {parts[1]}, usando 0")
-                        monto = 0.0
+                    monto = self._parsear_monto(parts[1])
                     
                     # Parsear fecha y hora
                     fecha_raw = parts[2].strip() if len(parts) > 2 else ""
@@ -209,7 +223,9 @@ class YapesPDF:
                             logger.warning(f"Error filtrando fecha '{fecha}': {e}")
                             pass
                     
-                    nombre_original = parts[0].upper()
+                    tokens = parts[0].split()
+                    primer_nombre = tokens[0] if tokens else parts[0]
+                    nombre_original = primer_nombre.upper()
                     nombre_normalizado = self._normalizar_nombre(nombre_original)
                     
                     self.data.append({
@@ -227,7 +243,173 @@ class YapesPDF:
         except Exception as e:
             logger.error(f"Error parseando CSV: {e}")
             return False
-    
+
+    def parse_xlsx(self) -> bool:
+        """Parsear archivo XLSX"""
+        try:
+            wb = openpyxl.load_workbook(self.file_path, read_only=True)
+            ws = wb.active
+            if ws is None:
+                logger.error("No se encontró hoja activa en el XLSX")
+                return False
+
+            filas = list(ws.iter_rows(values_only=True))
+            if len(filas) < 2:
+                logger.warning("XLSX sin suficientes filas (mínimo 2)")
+                return False
+
+            logger.info(f"XLSX leído: total filas={len(filas)}")
+
+            lineas_procesadas = 0
+            datos_anadidos = 0
+
+            for row in filas[1:]:
+                lineas_procesadas += 1
+                if not row or all(v is None for v in row):
+                    continue
+
+                parts = [str(v).strip() if v is not None else '' for v in row]
+                logger.info(f"Fila {lineas_procesadas}: {len(parts)} partes, parts={parts[:3]}")
+
+                if len(parts) >= 2 and parts[0] and parts[1]:
+                    monto = self._parsear_monto(parts[1])
+
+                    if monto == 0.0:
+                        logger.warning(f"Monto inválido: {parts[1]}, usando 0")
+                        monto = 0.0
+
+                    fecha_raw = parts[2].strip() if len(parts) > 2 else ""
+                    fecha, hora = self._parsear_fecha(fecha_raw)
+
+                    if self.fecha_inicio or self.fecha_fin:
+                        try:
+                            item_date = datetime.strptime(fecha, '%d/%m/%Y')
+                            if self.fecha_inicio:
+                                inicio = datetime.strptime(self.fecha_inicio, '%Y-%m-%d')
+                                if item_date < inicio:
+                                    continue
+                            if self.fecha_fin:
+                                fin = datetime.strptime(self.fecha_fin, '%Y-%m-%d')
+                                if item_date > fin:
+                                    continue
+                        except Exception as e:
+                            logger.warning(f"Error filtrando fecha '{fecha}': {e}")
+                            pass
+
+                    tokens = parts[0].split()
+                    primer_nombre = tokens[0] if tokens else parts[0]
+                    nombre_original = primer_nombre.upper()
+                    nombre_normalizado = self._normalizar_nombre(nombre_original)
+
+                    self.data.append({
+                        'nombre': nombre_original,
+                        'nombre_key': nombre_normalizado,
+                        'monto': monto,
+                        'fecha': fecha,
+                        'hora': hora
+                    })
+                    datos_anadidos += 1
+
+            logger.info(f"XLSX parseado: filas={lineas_procesadas}, añadidos={datos_anadidos}, data={len(self.data)}")
+            return len(self.data) > 0
+        except Exception as e:
+            logger.error(f"Error parseando XLSX: {e}")
+            return False
+
+    def parse_gsheets(self) -> bool:
+        """Parsear datos desde Google Sheets (export CSV)"""
+        try:
+            logger.info(f"Descargando datos desde Google Sheets: {self.sheets_url[:60]}...")
+            resp = requests.get(self.sheets_url, timeout=30)
+            resp.raise_for_status()
+            content = resp.text
+
+            lines = content.splitlines()
+            if len(lines) < 2:
+                logger.warning("Google Sheets sin suficientes filas")
+                return False
+
+            logger.info(f"Google Sheets: {len(lines)} filas descargadas")
+
+            lineas_procesadas = 0
+            datos_anadidos = 0
+
+            for line in lines[1:]:
+                lineas_procesadas += 1
+                if not line.strip():
+                    continue
+
+                parts = []
+                in_quote = False
+                current = ""
+                for char in line.strip():
+                    if char == '"':
+                        in_quote = not in_quote
+                    elif char == ',' and not in_quote:
+                        parts.append(current)
+                        current = ""
+                    else:
+                        current += char
+                parts.append(current)
+
+                parts = [self._limpiar_texto(p) for p in parts]
+
+                if len(parts) >= 2 and parts[0] and parts[1]:
+                    monto = self._parsear_monto(parts[1])
+
+                    if monto == 0.0:
+                        logger.warning(f"Monto inválido: {parts[1]}, usando 0")
+                        monto = 0.0
+
+                    fecha_raw = parts[2].strip() if len(parts) > 2 else ""
+                    fecha, hora = self._parsear_fecha(fecha_raw)
+
+                    if self.fecha_inicio or self.fecha_fin:
+                        try:
+                            item_date = datetime.strptime(fecha, '%d/%m/%Y')
+                            if self.fecha_inicio:
+                                inicio = datetime.strptime(self.fecha_inicio, '%Y-%m-%d')
+                                if item_date < inicio:
+                                    continue
+                            if self.fecha_fin:
+                                fin = datetime.strptime(self.fecha_fin, '%Y-%m-%d')
+                                if item_date > fin:
+                                    continue
+                        except Exception as e:
+                            logger.warning(f"Error filtrando fecha '{fecha}': {e}")
+                            pass
+
+                    tokens = parts[0].split()
+                    primer_nombre = tokens[0] if tokens else parts[0]
+                    nombre_original = primer_nombre.upper()
+                    nombre_normalizado = self._normalizar_nombre(nombre_original)
+
+                    self.data.append({
+                        'nombre': nombre_original,
+                        'nombre_key': nombre_normalizado,
+                        'monto': monto,
+                        'fecha': fecha,
+                        'hora': hora
+                    })
+                    datos_anadidos += 1
+
+            logger.info(f"Google Sheets parseado: filas={lineas_procesadas}, añadidos={datos_anadidos}, data={len(self.data)}")
+            return len(self.data) > 0
+        except requests.RequestException as e:
+            logger.error(f"Error de red al descargar Google Sheets: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error parseando Google Sheets: {e}")
+            return False
+
+    def parse(self) -> bool:
+        """Auto-detectar fuente de datos y parsear"""
+        if self.sheets_url:
+            return self.parse_gsheets()
+        if self.file_path.lower().endswith('.xlsx'):
+            return self.parse_xlsx()
+        return self.parse_csv()
+
     def generate_pdf(self):
         """Generar PDF de YAPES"""
         from collections import defaultdict
@@ -879,6 +1061,7 @@ class FacturaXMLtoPDF:
     
     def _generate_ticket_pdf(self):
         """Generar ticket 80mm"""
+
         page_height = self.calculate_total_height()
         
         pdf = FPDF(orientation='P', unit='mm', format=(self.page_width, page_height))
@@ -1452,7 +1635,7 @@ HTML_TEMPLATE = """
                         <label for="xml_file" class="file-label" id="fileLabel">
                             Subir archivo
                         </label>
-                        <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv" onchange="updateFileName()">
+                        <input type="file" name="xml_file" id="xml_file" accept=".xml,.csv,.xlsx" onchange="updateFileName()">
                     </div>
                     
                     <div class="form-group">
@@ -1594,11 +1777,11 @@ HTML_TEMPLATE = """
         
         if (input.files && input.files[0]) {
             var fileName = input.files[0].name.toLowerCase();
-            if (!fileName.endsWith('.xml') && !fileName.endsWith('.csv')) {
+            if (!fileName.endsWith('.xml') && !fileName.endsWith('.csv') && !fileName.endsWith('.xlsx')) {
                 Swal.fire({
                     icon: 'error',
                     title: 'Archivo inválido',
-                    text: 'El archivo debe ser XML o CSV',
+                    text: 'El archivo debe ser XML, CSV o XLSX',
                     confirmButtonColor: '#dc2626',
                     confirmButtonText: 'Aceptar'
                 });
@@ -1860,43 +2043,87 @@ def convertir():
                 logger.info(f"Recuperando de archivo: {xml_path}={len(xml_data)} bytes")
             logger.info(f"Usando datos: {len(xml_data) if xml_data else 0} bytes")
         
-        if not xml_data:
+        if not xml_data and formato != 'yapes':
             return render_template_string(HTML_TEMPLATE, error="Por favor, selecciona un archivo")
         
         # Construir agency_name
         agency_name = otra_agencia if agencia == 'OTRA' else agencia
         
         # Determinar tipo de archivo
-        if filename.endswith('.csv') or formato == 'yapes':
-            if not filename.endswith('.csv'):
-                return render_template_string(HTML_TEMPLATE, error="Para formato YAPES debe subir un archivo CSV")
-            
-            # Procesar CSV para YAPES - siempre reescribir desde sesión para evitar truncado
-            import uuid as uuid_module
-            csv_temp_id = uuid_module.uuid4().hex
-            csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
-            
-            # Verificar tipo de datos y extraer xml_data de sesión
-            if not xml_data:
-                xml_data = session.get('xml_file_data')
-            
-            if isinstance(xml_data, str):
-                xml_data = xml_data.encode('utf-8')
-            
-            with open(csv_path, 'wb') as f:
-                f.write(xml_data)
-            
-            logger.info(f"Guardando CSV en disco: {len(xml_data)} bytes, verificado: {os.path.getsize(csv_path)} bytes")
-            session['csv_file_path'] = csv_path
+        if filename.endswith(('.csv', '.xlsx')) or formato == 'yapes':
+            ext = '.csv'
+            if filename.endswith('.xlsx'):
+                ext = '.xlsx'
+            elif not filename.endswith(('.csv', '.xlsx')) and xml_data:
+                return render_template_string(HTML_TEMPLATE, error="Para formato YAPES debe subir un archivo CSV o XLSX")
             
             import uuid as uuid_module
             pdf_temp_id = uuid_module.uuid4().hex
             output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
             
-            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            # Si no hay archivo subido, usar Google Sheets
+            if not xml_data and YAPES_SHEETS_URL:
+                yapes = YapesPDF(output_path=output_path, fecha_inicio=yapes_fecha_inicio, fecha_fin=yapes_fecha_fin, sheets_url=YAPES_SHEETS_URL)
+                if not yapes.parse():
+                    return render_template_string(HTML_TEMPLATE, error="Error al conectar con Google Sheets")
+                if not yapes.data:
+                    inicio_fmt = datetime.strptime(yapes_fecha_inicio, '%Y-%m-%d').strftime('%d/%m/%Y') if yapes_fecha_inicio else 'N/A'
+                    fin_fmt = datetime.strptime(yapes_fecha_fin, '%Y-%m-%d').strftime('%d/%m/%Y') if yapes_fecha_fin else 'N/A'
+                    msg = f"No se encontraron registros entre {inicio_fmt} y {fin_fmt} en Google Sheets."
+                    return render_template_string(HTML_TEMPLATE, error=msg)
+                yapes.generate_pdf()
+                pdf_name = f"YAPES_RESUMEN_{datetime.now().strftime('%Y%m%d')}.pdf"
+                info = {
+                    'tipo': 'YAPES RESUMEN',
+                    'numero': f"{len(yapes.data)} registros",
+                    'emisor': '-',
+                    'cliente': 'Varios',
+                    'total': '-',
+                    'fecha': yapes.rango_fechas_yape if yapes.rango_fechas_yape else datetime.now().strftime('%d/%m/%Y')
+                }
+                temp_id = pdf_temp_id
+                session['current_pdf'] = temp_id
+                session['pdf_name'] = pdf_name
+                session['pdf_info'] = info
+                session['xml_file_name'] = session.get('xml_file_name', '')
+                session['selected_formato'] = formato
+                session['selected_agencia'] = ''
+                session['selected_otra_agencia'] = ''
+                session['selected_notes'] = ''
+                session['selected_recoje'] = ''
+                session['selected_recoje_dni'] = ''
+                session['selected_recoje_nombre'] = ''
+                session['selected_recoje_direccion'] = ''
+                if yapes_fecha_inicio:
+                    session['selected_yapes_fecha_inicio'] = yapes_fecha_inicio
+                if yapes_fecha_fin:
+                    session['selected_yapes_fecha_fin'] = yapes_fecha_fin
+                session.modified = True
+                pdf_url = url_for('view_pdf', temp_id=temp_id)
+                logger.info(f"PDF generado desde Google Sheets: temp_id={temp_id}, url={pdf_url}")
+                return redirect(url_for('index'))
             
-            if not yapes.parse_csv():
-                return render_template_string(HTML_TEMPLATE, error="Error al procesar el CSV. Formato: Nombre,Monto,Fecha")
+            # Procesar archivo subido para YAPES
+                import uuid as uuid_module
+                csv_temp_id = uuid_module.uuid4().hex
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
+                
+                if not xml_data:
+                    xml_data = session.get('xml_file_data')
+                
+                if isinstance(xml_data, str):
+                    xml_data = xml_data.encode('utf-8')
+                
+                with open(csv_path, 'wb') as f:
+                    f.write(xml_data)
+                
+                logger.info(f"Guardando archivo en disco: {len(xml_data)} bytes, verificado: {os.path.getsize(csv_path)} bytes")
+                session['csv_file_path'] = csv_path
+                
+                yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            
+            if not yapes.parse():
+                return render_template_string(HTML_TEMPLATE, error="Error al procesar el archivo. Formato esperado: Nombre,Monto,Fecha")
             
             if not yapes.data:
                 inicio_fmt = datetime.strptime(yapes_fecha_inicio, '%Y-%m-%d').strftime('%d/%m/%Y') if yapes_fecha_inicio else 'N/A'
@@ -1968,7 +2195,7 @@ def convertir():
                 'fecha': factura.data.get('fecha_emision', 'N/A')
             }
         else:
-            return render_template_string(HTML_TEMPLATE, error="Formato no soportado. Use XML o CSV")
+            return render_template_string(HTML_TEMPLATE, error="Formato no soportado. Use XML, CSV o XLSX")
         
         # Guardar PDF en sesión (en memoria para Render)
         temp_id = pdf_temp_id
@@ -2062,10 +2289,11 @@ def view_pdf(temp_id):
         
         if formato == 'yapes':
             csv_path = session.get('csv_file_path')
+            ext = session.get('yapes_file_ext', '.csv')
             if not csv_path or not os.path.exists(csv_path):
                 import uuid as uuid_module
                 csv_temp_id = uuid_module.uuid4().hex
-                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
                 with open(csv_path, 'wb') as f:
                     f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
                 session['csv_file_path'] = csv_path
@@ -2073,8 +2301,8 @@ def view_pdf(temp_id):
             yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
             yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
             yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
-            if not yapes.parse_csv():
-                return "Error al procesar el CSV", 500
+            if not yapes.parse():
+                return "Error al procesar el archivo", 500
             yapes.generate_pdf()
         else:
             factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
@@ -2145,10 +2373,11 @@ def download_pdf():
         
         if formato == 'yapes':
             csv_path = session.get('csv_file_path')
+            ext = session.get('yapes_file_ext', '.csv')
             if not csv_path or not os.path.exists(csv_path):
                 import uuid as uuid_module
                 csv_temp_id = uuid_module.uuid4().hex
-                csv_path = os.path.join('temp_files', f'{csv_temp_id}.csv')
+                csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
                 with open(csv_path, 'wb') as f:
                     f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
                 session['csv_file_path'] = csv_path
@@ -2156,8 +2385,8 @@ def download_pdf():
             yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
             yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
             yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
-            if not yapes.parse_csv():
-                return "Error al procesar el CSV", 500
+            if not yapes.parse():
+                return "Error al procesar el archivo", 500
             yapes.generate_pdf()
         else:
             factura = FacturaXMLtoPDF(xml_path, output_path, extra_data)
