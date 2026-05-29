@@ -1763,6 +1763,12 @@ HTML_TEMPLATE = """
     function validarArchivo() {
         var input = document.getElementById('xml_file');
         var fileLabel = document.getElementById('fileLabel');
+        var formato = document.getElementById('formato').value;
+        
+        // Formato YAPES puede usar Google Sheets sin archivo
+        if (formato === 'yapes' && (!input.files || !input.files[0]) && (!fileLabel.classList.contains('active'))) {
+            return true;
+        }
         
         if ((!input.files || !input.files[0]) && (!fileLabel.classList.contains('active'))) {
             Swal.fire({
