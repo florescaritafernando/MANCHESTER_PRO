@@ -2101,6 +2101,7 @@ def convertir():
                 session['selected_recoje_dni'] = ''
                 session['selected_recoje_nombre'] = ''
                 session['selected_recoje_direccion'] = ''
+                session['yapes_sheets_url'] = YAPES_SHEETS_URL
                 if yapes_fecha_inicio:
                     session['selected_yapes_fecha_inicio'] = yapes_fecha_inicio
                 if yapes_fecha_fin:
@@ -2257,7 +2258,7 @@ def view_pdf(temp_id):
         xml_data = session.get('xml_file_data')
         formato = session.get('selected_formato', 'ticket')
         
-        if not xml_data:
+        if not xml_data and formato != 'yapes':
             return "Archivo no encontrado. Por favor, sube el archivo nuevamente.", 404
         
         # Generar PDF temporal
@@ -2266,11 +2267,13 @@ def view_pdf(temp_id):
         pdf_temp_id = uuid_module.uuid4().hex
         output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
         
-        # Guardar XML temporal
-        xml_temp_id = uuid_module.uuid4().hex
-        xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
-        with open(xml_path, 'wb') as f:
-            f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+        if not xml_data and formato == 'yapes':
+            xml_path = ''
+        else:
+            xml_temp_id = uuid_module.uuid4().hex
+            xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
         
         # Obtener datos adicionales
         agencia = session.get('selected_agencia', '')
@@ -2295,19 +2298,26 @@ def view_pdf(temp_id):
             }
         
         if formato == 'yapes':
+            sheets_url = session.get('yapes_sheets_url', '')
             csv_path = session.get('csv_file_path')
             ext = session.get('yapes_file_ext', '.csv')
-            if not csv_path or not os.path.exists(csv_path):
-                import uuid as uuid_module
-                csv_temp_id = uuid_module.uuid4().hex
-                csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
-                with open(csv_path, 'wb') as f:
-                    f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
-                session['csv_file_path'] = csv_path
             
-            yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
-            yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
-            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            if sheets_url and (not csv_path or not os.path.exists(csv_path)):
+                yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+                yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+                yapes = YapesPDF(output_path=output_path, fecha_inicio=yapes_fecha_inicio, fecha_fin=yapes_fecha_fin, sheets_url=sheets_url)
+            else:
+                if not csv_path or not os.path.exists(csv_path):
+                    import uuid as uuid_module
+                    csv_temp_id = uuid_module.uuid4().hex
+                    csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
+                    with open(csv_path, 'wb') as f:
+                        f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+                    session['csv_file_path'] = csv_path
+                yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+                yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+                yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            
             if not yapes.parse():
                 return "Error al procesar el archivo", 500
             yapes.generate_pdf()
@@ -2341,7 +2351,7 @@ def download_pdf():
         pdf_name = session.get('pdf_name', 'documento.pdf')
         formato = session.get('selected_formato', 'ticket')
         
-        if not xml_data:
+        if not xml_data and formato != 'yapes':
             return "Archivo no encontrado. Por favor, sube el archivo nuevamente.", 404
         
         # Generar PDF temporal
@@ -2350,11 +2360,13 @@ def download_pdf():
         pdf_temp_id = uuid_module.uuid4().hex
         output_path = os.path.join('temp_files', f'{pdf_temp_id}.pdf')
         
-        # Guardar XML temporal
-        xml_temp_id = uuid_module.uuid4().hex
-        xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
-        with open(xml_path, 'wb') as f:
-            f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+        if not xml_data and formato == 'yapes':
+            xml_path = ''
+        else:
+            xml_temp_id = uuid_module.uuid4().hex
+            xml_path = os.path.join('temp_files', f'{xml_temp_id}.xml')
+            with open(xml_path, 'wb') as f:
+                f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
         
         # Obtener datos adicionales
         agencia = session.get('selected_agencia', '')
@@ -2379,19 +2391,26 @@ def download_pdf():
             }
         
         if formato == 'yapes':
+            sheets_url = session.get('yapes_sheets_url', '')
             csv_path = session.get('csv_file_path')
             ext = session.get('yapes_file_ext', '.csv')
-            if not csv_path or not os.path.exists(csv_path):
-                import uuid as uuid_module
-                csv_temp_id = uuid_module.uuid4().hex
-                csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
-                with open(csv_path, 'wb') as f:
-                    f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
-                session['csv_file_path'] = csv_path
             
-            yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
-            yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
-            yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            if sheets_url and (not csv_path or not os.path.exists(csv_path)):
+                yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+                yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+                yapes = YapesPDF(output_path=output_path, fecha_inicio=yapes_fecha_inicio, fecha_fin=yapes_fecha_fin, sheets_url=sheets_url)
+            else:
+                if not csv_path or not os.path.exists(csv_path):
+                    import uuid as uuid_module
+                    csv_temp_id = uuid_module.uuid4().hex
+                    csv_path = os.path.join('temp_files', f'{csv_temp_id}{ext}')
+                    with open(csv_path, 'wb') as f:
+                        f.write(xml_data if isinstance(xml_data, bytes) else xml_data.encode('utf-8'))
+                    session['csv_file_path'] = csv_path
+                yapes_fecha_inicio = session.get('selected_yapes_fecha_inicio', '')
+                yapes_fecha_fin = session.get('selected_yapes_fecha_fin', '')
+                yapes = YapesPDF(csv_path, output_path, yapes_fecha_inicio, yapes_fecha_fin)
+            
             if not yapes.parse():
                 return "Error al procesar el archivo", 500
             yapes.generate_pdf()
